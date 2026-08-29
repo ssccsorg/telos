@@ -403,6 +403,7 @@ impl WebSocketSync {
             "open_thread" => Self::handle_open_thread(command.data).await,
             "query_ui_state" => Self::handle_query_ui_state(command.data).await,
             "cancel_current_turn" => Self::handle_cancel_current_turn(command.data).await,
+            "resolve_tool_call_authorization" => Self::handle_resolve_tool_call_authorization(command.data).await,
             _ => {
                 eprintln!("⚠️  [WEBSOCKET-IN] Ignoring unknown command: {}", command.command_type);
                 log::warn!("⚠️  [WEBSOCKET-IN] Ignoring unknown command: {}", command.command_type);
@@ -557,6 +558,25 @@ impl WebSocketSync {
 
         crate::request_thread_cancellation(crate::CancellationRequest { request_id })?;
 
+        Ok(())
+    }
+
+    /// Handle resolve_tool_call_authorization command (approve/deny a tool call)
+    async fn handle_resolve_tool_call_authorization(data: serde_json::Value) -> Result<()> {
+        let acp_thread_id = data.get("acp_thread_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let tool_call_id = data.get("tool_call_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let allow = data.get("allow").and_then(|v| v.as_bool()).unwrap_or(false);
+        log::info!(
+            "[WEBSOCKET-IN] Processing resolve_tool_call_authorization: thread={} tool={} allow={}",
+            acp_thread_id, tool_call_id, allow
+        );
+        crate::resolve_tool_call_authorization(acp_thread_id, tool_call_id, allow)?;
         Ok(())
     }
 

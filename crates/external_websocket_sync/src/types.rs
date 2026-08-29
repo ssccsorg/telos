@@ -247,6 +247,14 @@ pub enum SyncEvent {
         /// "cancelled" if a turn was stopped, "noop" if no active turn for that request_id
         status: String,
     },
+    /// Sent when the agent requests permission for a tool call (ask mode).
+    /// The external runtime resolves it with `resolve_tool_call_authorization`.
+    #[serde(rename = "tool_call_authorization_requested")]
+    ToolCallAuthorizationRequested {
+        acp_thread_id: String,
+        tool_call_id: String,
+        tool_name: String,
+    },
     /// Response to query_ui_state command — reports current agent panel UI state
     /// Used by E2E tests to verify that threads are correctly displayed
     #[serde(rename = "ui_state_response")]
@@ -340,6 +348,18 @@ impl SyncEvent {
                 serde_json::json!({
                     "request_id": request_id,
                     "status": status,
+                })
+            ),
+            SyncEvent::ToolCallAuthorizationRequested {
+                acp_thread_id,
+                tool_call_id,
+                tool_name,
+            } => (
+                "tool_call_authorization_requested".to_string(),
+                serde_json::json!({
+                    "acp_thread_id": acp_thread_id,
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
                 })
             ),
             SyncEvent::UiStateResponse { query_id, active_view, thread_id, entry_count, mcp_servers, active_model } => (

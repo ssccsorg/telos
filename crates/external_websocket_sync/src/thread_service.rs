@@ -981,6 +981,21 @@ pub fn ensure_thread_subscription(
                 }
             }
             // Stopped and Error are both turn-terminal and must send Helix a
+            AcpThreadEvent::ToolAuthorizationRequested(tool_call_id) => {
+                // Forward the permission request to the external runtime so it
+                // can approve or deny (ask mode). The thread stays in
+                // WaitingForConfirmation until a resolve command arrives.
+                let thread = thread_entity.read(cx);
+                let tool_name = thread
+                    .tool_call(&tool_call_id)
+                    .and_then(|(_, tc)| tc.tool_name.clone().map(|n| n.to_string()))
+                    .unwrap_or_else(|| tool_call_id.to_string());
+                let _ = crate::send_websocket_event(SyncEvent::ToolCallAuthorizationRequested {
+                    acp_thread_id: thread_id_for_sub.clone(),
+                    tool_call_id: tool_call_id.to_string(),
+                    tool_name,
+                });
+            }
             // terminal frame to free the activation lane. Stopped → completed;
             // Error (agent process exited mid-turn, or MaxTokens — run_turn's Err
             // arm) → chat_response_error. Without the Error arm a crashed agent
@@ -1605,6 +1620,50 @@ pub fn setup_thread_handler(
                     }) {
                         log::error!("[THREAD_SERVICE] Failed to send turn_cancelled noop event: {}", e);
                     }
+                }
+            }
+        }
+        anyhow::Ok(())
+    })
+    .detach();
+
+    // ── Tool-call authorization consumer ─────────────────────────────
+    // Receives approve/deny resolutions from the external runtime and
+    // resolves the corresponding WaitingForConfirmation tool call.
+    let (auth_tx, mut auth_rx) = mpsc::unbounded_channel::<crate::AuthorizationResolution>();
+    crate::init_authorization_callback(auth_tx);
+
+    cx.spawn(async move |cx| {
+        while let Some(resolution) = auth_rx.recv().await {
+            let thread = get_thread(&resolution.acp_thread_id);
+            match thread {
+                Some(weak_thread) => {
+                    let _ = cx.update(|cx| {
+                        if let Some(thread_entity) = weak_thread.upgrade() {
+                            thread_entity.update(cx, |thread, cx| {
+                                let outcome = authorization_outcome(thread, &resolution.tool_call_id, resolution.allow);
+                                match outcome {
+                                    Some(outcome) => {
+                                        thread.authorize_tool_call(
+                                            acp::v1::ToolCallId::new(resolution.tool_call_id.as_str()),
+                                            outcome,
+                                            cx,
+                                        );
+                                    }
+                                    None => log::warn!(
+                                        "[THREAD_SERVICE] No waiting tool call {} in thread {} to authorize",
+                                        resolution.tool_call_id, resolution.acp_thread_id
+                                    ),
+                                }
+                            });
+                        }
+                    });
+                }
+                None => {
+                    log::warn!(
+                        "[THREAD_SERVICE] Authorization resolution for unknown thread: {}",
+                        resolution.acp_thread_id
+                    );
                 }
             }
         }
@@ -3000,4 +3059,30 @@ mod agent_process_crash_tests {
              interaction stays waiting forever — the permanent worker wedge."
         );
     }
+}
+
+
+/// Build the authorization outcome for a waiting tool call from an
+/// approve/deny decision, using the option ids presented in the request.
+fn authorization_outcome(
+    thread: &AcpThread,
+    tool_call_id: &str,
+    allow: bool,
+) -> Option<acp_thread::SelectedPermissionOutcome> {
+    let id = acp::v1::ToolCallId::new(tool_call_id);
+    let (_, tool_call) = thread.tool_call(&id)?;
+    let acp_thread::ToolCallStatus::WaitingForConfirmation { options, .. } = &tool_call.status
+    else {
+        return None;
+    };
+    let kind = if allow {
+        acp::v1::PermissionOptionKind::AllowOnce
+    } else {
+        acp::v1::PermissionOptionKind::RejectOnce
+    };
+    let option = options.first_option_of_kind(kind)?;
+    Some(acp_thread::SelectedPermissionOutcome::new(
+        option.option_id.clone(),
+        option.kind,
+    ))
 }

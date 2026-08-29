@@ -2278,6 +2278,38 @@ impl NativeAgentConnection {
                                 context: _,
                                 kind,
                             }) => {
+                                // Headless approval policy, driven by the
+                                // external runtime through ZED_TOOL_APPROVAL:
+                                // "always" resolves with AllowOnce, "never"
+                                // with RejectOnce, anything else falls through
+                                // to the normal authorization request.
+                                let auto_outcome =
+                                    match std::env::var("ZED_TOOL_APPROVAL").ok().as_deref() {
+                                        Some("always") => options
+                                            .first_option_of_kind(
+                                                acp::PermissionOptionKind::AllowOnce,
+                                            )
+                                            .map(|option| {
+                                                acp_thread::SelectedPermissionOutcome::new(
+                                                    option.option_id.clone(),
+                                                    option.kind,
+                                                )
+                                            }),
+                                        Some("never") => options
+                                            .first_option_of_kind(
+                                                acp::PermissionOptionKind::RejectOnce,
+                                            )
+                                            .map(|option| {
+                                                acp_thread::SelectedPermissionOutcome::new(
+                                                    option.option_id.clone(),
+                                                    option.kind,
+                                                )
+                                            }),
+                                        _ => None,
+                                    };
+                                if let Some(outcome) = auto_outcome {
+                                    let _ = response.send(outcome);
+                                } else {
                                 let outcome_task = acp_thread.update(cx, |thread, cx| {
                                     thread.request_tool_call_authorization(
                                         tool_call, options, kind, cx,
@@ -2302,6 +2334,7 @@ impl NativeAgentConnection {
                                         .log_err();
                                 })
                                 .detach();
+                                }
                             }
                             ThreadEvent::ToolCallAuthorizationResolved {
                                 tool_call_id,

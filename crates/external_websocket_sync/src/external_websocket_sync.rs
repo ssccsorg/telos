@@ -87,6 +87,10 @@ static GLOBAL_UI_STATE_QUERY_CALLBACK: parking_lot::Mutex<Option<mpsc::Unbounded
 static GLOBAL_CANCELLATION_CALLBACK: parking_lot::Mutex<Option<mpsc::UnboundedSender<CancellationRequest>>> =
     parking_lot::Mutex::new(None);
 
+/// Static global for tool-call authorization resolutions (approve/deny from the external runtime)
+static GLOBAL_AUTHORIZATION_CALLBACK: parking_lot::Mutex<Option<mpsc::UnboundedSender<AuthorizationResolution>>> =
+    parking_lot::Mutex::new(None);
+
 /// Static global for cancel-thread callback.
 /// Receives an acp_thread_id and immediately cancels that thread's running turn,
 /// bypassing the sequential callback_rx loop (which would be blocked awaiting the turn).
@@ -129,6 +133,14 @@ pub struct UiStateQueryRequest {
 #[derive(Clone, Debug)]
 pub struct CancellationRequest {
     pub request_id: String,
+}
+
+/// Resolution of a pending tool-call authorization from the external runtime
+#[derive(Clone, Debug)]
+pub struct AuthorizationResolution {
+    pub acp_thread_id: String,
+    pub tool_call_id: String,
+    pub allow: bool,
 }
 
 /// Notification to display a thread in AgentPanel (for auto-select)
@@ -332,6 +344,30 @@ pub fn request_ui_state_query(request: UiStateQueryRequest) -> Result<()> {
 pub fn init_cancellation_callback(sender: mpsc::UnboundedSender<CancellationRequest>) {
     log::info!("[CALLBACK] init_cancellation_callback() called - registering global callback");
     *GLOBAL_CANCELLATION_CALLBACK.lock() = Some(sender);
+}
+
+/// Initialize the global tool-call authorization callback (called from thread_service)
+pub fn init_authorization_callback(sender: mpsc::UnboundedSender<AuthorizationResolution>) {
+    log::info!("[CALLBACK] init_authorization_callback() called - registering global callback");
+    *GLOBAL_AUTHORIZATION_CALLBACK.lock() = Some(sender);
+}
+
+/// Resolve a pending tool-call authorization (called from the WebSocket handler)
+pub fn resolve_tool_call_authorization(acp_thread_id: String, tool_call_id: String, allow: bool) -> Result<()> {
+    log::info!(
+        "[CALLBACK] resolve_tool_call_authorization() called: thread={} tool={} allow={}",
+        acp_thread_id, tool_call_id, allow
+    );
+    let sender = GLOBAL_AUTHORIZATION_CALLBACK.lock().clone();
+    match sender {
+        Some(sender) => sender
+            .send(AuthorizationResolution { acp_thread_id, tool_call_id, allow })
+            .map_err(|_| anyhow::anyhow!("Failed to send authorization resolution")),
+        None => {
+            log::warn!("[CALLBACK] Authorization callback not initialized");
+            Ok(())
+        }
+    }
 }
 
 /// Request cancellation of an active thread turn (called from WebSocket handler)
