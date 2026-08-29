@@ -1453,7 +1453,10 @@ fn initialize_headless(app_state: Arc<AppState>, paths: Vec<String>, cx: &mut Ap
             app_state.fs.clone(),
             None,
             project::LocalProjectFlags {
-                init_worktree_trust: false,
+                // Headless projects must trust their worktrees: an untrusted
+                // worktree downgrades the agent profile to "minimal", which
+                // has no tools enabled.
+                init_worktree_trust: true,
                 watch_global_configs: false,
             },
             cx,
@@ -1483,6 +1486,14 @@ fn initialize_headless(app_state: Arc<AppState>, paths: Vec<String>, cx: &mut Ap
             })
             .detach();
         }
+
+        // Headless projects always trust their worktrees. An untrusted
+        // worktree downgrades the agent profile to "minimal", which has no
+        // tools enabled, so the model would see an empty tool list.
+        let mut project_settings =
+            project::project_settings::ProjectSettings::get_global(cx).clone();
+        project_settings.session.trust_all_worktrees = true;
+        project::project_settings::ProjectSettings::override_global(project_settings, cx);
 
         let thread_store = ThreadStore::global(cx);
 
