@@ -1,0 +1,46 @@
+[package]
+name = "telos-headless"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "telos-headless"
+path = "src/main.rs"
+
+[dependencies]
+agent.workspace = true
+acp_thread.workspace = true
+agent_servers.workspace = true
+agent_settings.workspace = true
+external_websocket_sync.workspace = true
+project.workspace = true
+fs.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+language_model.workspace = true
+language_models.workspace = true
+prompt_store.workspace = true
+settings.workspace = true
+release_channel.workspace = true
+feature_flags.workspace = true
+zlog.workspace = true
+zed_env_vars.workspace = true
+client.workspace = true
+db.workspace = true
+paths.workspace = true
+theme.workspace = true
+util.workspace = true
+anyhow.workspace = true
+log.workspace = true
+serde_json.workspace = true
+collections.workspace = true
+parking_lot.workspace = true
+language.workspace = true
+node_runtime.workspace = true
+reqwest_client.workspace = true
+zlog_settings.workspace = true
+semver = "1"
+tokio.workspace = true
+watch.workspace = true
+

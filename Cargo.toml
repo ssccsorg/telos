@@ -5,6 +5,7 @@ members = [
     "crates/telos-protocol",
     "crates/telos-core",
     "crates/telos",
+    "crates/telos-headless",
     "crates/acp_tools",
     "crates/action_log",
     "crates/activity_indicator",

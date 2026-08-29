@@ -18275,6 +18275,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "telos-headless"
+version = "0.1.0"
+dependencies = [
+ "acp_thread",
+ "agent",
+ "agent_servers",
+ "agent_settings",
+ "anyhow",
+ "client",
+ "collections",
+ "db",
+ "external_websocket_sync",
+ "feature_flags",
+ "fs",
+ "gpui",
+ "gpui_platform",
+ "language",
+ "language_model",
+ "language_models",
+ "log",
+ "node_runtime",
+ "parking_lot",
+ "paths",
+ "project",
+ "prompt_store",
+ "release_channel",
+ "reqwest_client",
+ "semver",
+ "serde_json",
+ "settings",
+ "theme",
+ "tokio",
+ "util",
+ "watch",
+ "zed_env_vars",
+ "zlog",
+ "zlog_settings",
+]
+
+[[package]]
 name = "telos-protocol"
 version = "0.1.0"
 dependencies = [
