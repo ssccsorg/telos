@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/telos-protocol", "crates/telos"]
+members = ["crates/telos-protocol", "crates/telos-core", "crates/telos"]
 
 [workspace.package]
 version = "0.1.0"
