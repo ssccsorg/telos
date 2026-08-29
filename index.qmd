@@ -1,0 +1,118 @@
+---
+title: "Telos"
+subtitle: "General agent execution layer: teleport executor over the coordinate space"
+format:
+    html: {}
+---
+
+```{python}
+#| include: false
+#| context: local
+title_meta_items = {
+    "html": [
+        {"title": "Code", "link": "https://github.com/ssccsorg/telos", "content": "GitHub", "icon": "bi bi-link"},
+        {"title": "References", "link": "https://github.com/ssccsorg/actus", "content": "Actus", "icon": "bi bi-link"},
+        {"title": "References", "link": "https://docs.ssccs.org/projects/syntagma/", "content": "synTagma", "icon": "bi bi-link"},
+        {"title": "References", "link": "https://docs.ssccs.org/projects/nexus/", "content": "neXus", "icon": "bi bi-link"},
+    ]
+}
+```
+
+Telos is the general agent execution layer of the SSCCS stack. It sits
+below actus and above the physical medium: actus plans with the LLM,
+telos converts those plans into system effects. A command arrives, a
+coordinate is resolved, a process or file or network effect happens, and
+the result returns. The layer is general: it is not tied to a code editor,
+a language, or a domain. It executes.
+
+The working thesis is that an agent does not need to traverse trees to
+act. Files are not found by descent; work is addressed by coordinate and
+reached by teleport. The agent moves between work locations in space, and
+telos materializes that movement as concrete system calls, tool
+invocations, and protocol traffic over files, processes, and networks.
+
+```{python}
+#| include: false
+#| context: local
+def dot(src: str):
+    from graphviz import Source
+    return Source(src)
+```
+
+```{python}
+#| label: fig-telos-hierarchy
+#| fig-cap: "The SSCCS stack: physical foundation, data hub, verification, intelligence, and execution. Telos is the execution layer that turns actus plans into system effects."
+dot("""
+digraph SSCCSStack {
+    rankdir=TB;
+    node [shape=box, style="rounded,filled", fontname="sans-serif"];
+
+    foundation [label="Physical foundation\nChton (tagma)", fillcolor="#d4f1f9"];
+    hub        [label="Data hub\nNexus", fillcolor="#e1bee7"];
+    verify     [label="Verification\nEV and peers", fillcolor="#fff9c4"];
+    intellect  [label="Intelligence\nActus", fillcolor="#a8e6cf"];
+    execute    [label="Execution\nTelos", fillcolor="#ffd3b6"];
+
+    foundation -> hub -> verify -> intellect -> execute;
+    execute -> foundation [label="system effects", style=dashed];
+}
+""")
+```
+
+## Layers
+
+| Layer | Project | Role |
+|:---|:---|:---|
+| Physical foundation | Chton (tagma) | coordinates over disk, RAM, and network bytes |
+| Data hub | Nexus | logs, snapshots, and state over the coordinate space |
+| Verification | EV and peers | mathematical verification of coordinate operations |
+| Intelligence | Actus | planning with the LLM, domain knowledge |
+| Execution | Telos | command intake, system call conversion, ACP/MCP execution |
+
+## Contract
+
+Telos keeps a wire contract 1:1 with actus. Actus launches telos as its
+agent binary; telos connects back over WebSocket, announces readiness, and
+then serves commands and emits events. The contract is the only stable
+boundary: eight event types flow from telos to actus, three command types
+flow from actus to telos, and every consumer path in actus depends on
+their semantics, including cumulative content overwrite, turn-end replay
+filtering, and the one-terminal-event-per-request rule.
+
+The bootstrap starts at the boundary. A mock agent emits the exact event
+sequences actus expects, the conformance suite gates every change, and the
+real execution core is filled in behind that stable surface. Because the
+interface is fixed first, the internals can be rebuilt freely without
+touching actus.
+
+## Design
+
+- Command intake: chat submission, cancellation, tool authorization
+  resolution arrive over the WebSocket contract.
+- Coordinate resolution: work locations are addressed by tagma
+  coordinates rather than path traversal, so opening a location is a jump,
+  not a walk.
+- Execution: file, process, network, and MCP effects are produced from
+  resolved coordinates; results stream back as cumulative entries.
+- Verification: EV and peers check the coordinate operations that
+  execution depends on.
+
+## Status
+
+Early bootstrap. The mock agent implements the contract end to end and the
+actus chat flow works with the telos binary attached. The conformance
+suite runs through the actus `run.sh` test path. The real execution core
+is the next step, with indexing integrated into the tagma coordinate space.
+
+## Direction
+
+- Real execution core behind the fixed contract, replacing the mock.
+- Basic indexing integrated into tagma coordinates, so location resolution
+  is arithmetic over coordinates instead of filesystem descent.
+- Time teleport: nexus replay restores a previous execution state at fine
+  granularity, coarser than a commit and cheaper than a checkout.
+- The layer stays general: any LLM, any environment, any domain.
+
+---
+
+*Telos is a project of the SSCCS Foundation.*
