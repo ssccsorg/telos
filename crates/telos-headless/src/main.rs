@@ -8,20 +8,27 @@
 
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
-use client::Client;
+use anyhow::Result;
+use client::{Client, UserStore};
 use fs::{Fs, RealFs};
 use gpui::{App, AppContext as _, Application, TaskExt as _};
 use settings::Settings as _;
 use language::LanguageRegistry;
-use client::UserStore;
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
 use project::{Project, project_settings::ProjectSettings};
-use release_channel::AppVersion;
-use util::ResultExt as _;
 use watch;
 
 fn main() {
+    // The shell-env capture invokes this binary with `--printenv` to dump
+    // the login-shell environment. Handle it before any app initialization:
+    // otherwise the child runs as a second headless agent, connects to the
+    // actus WebSocket, and never exits, leaving an orphan that fights the
+    // real agent for the single-server connection.
+    if std::env::args().any(|a| a == "--printenv") {
+        util::shell_env::print_env();
+        return;
+    }
+
     let app = Application::with_platform(gpui_platform::current_platform(true));
     app.run(move |cx| {
         if let Err(e) = run_headless(cx) {
@@ -84,18 +91,32 @@ fn run_headless(cx: &mut App) -> Result<()> {
         cx,
     );
 
-    // Worktree from the CLI path (first positional arg).
-    let paths: Vec<String> = std::env::args().skip(1).collect();
-    if let Some(path) = paths.into_iter().find(|p| !p.starts_with('-')) {
+    // Worktree from the CLI path. Actus launches with
+    // `--headless --allow-multiple-instances --user-data-dir <dir> <workdir>`,
+    // so flag values must be skipped before picking the positional workdir.
+    let raw_args: Vec<String> = std::env::args().skip(1).collect();
+    let mut workdir_path: Option<std::path::PathBuf> = None;
+    let mut i = 0;
+    while i < raw_args.len() {
+        match raw_args[i].as_str() {
+            "--user-data-dir" => {
+                i += 2; // skip the flag and its value
+                continue;
+            }
+            flag if flag.starts_with('-') => {}
+            path => workdir_path = Some(std::path::PathBuf::from(path)),
+        }
+        i += 1;
+    }
+    if let Some(path) = workdir_path {
         let project_clone = project.clone();
         let fs_clone = fs.clone();
         cx.spawn(async move |cx| {
-            let path = std::path::Path::new(&path);
             if path.exists() {
                 let canonical = fs_clone
-                    .canonicalize(path)
+                    .canonicalize(&path)
                     .await
-                    .unwrap_or_else(|_| path.to_path_buf());
+                    .unwrap_or_else(|_| path.clone());
                 cx.update(|cx| {
                     project_clone
                         .update(cx, |project, cx| {
