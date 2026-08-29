@@ -16,8 +16,11 @@ starts at the boundary: a mock agent emits the exact event sequences actus
 depends on, the conformance suite gates every change, and the internals are
 filled in behind that stable surface.
 
-Status: bootstrap. The mock agent implements the contract end to end so
-the actus chat flow works with this binary attached.
+Status: bootstrap. A self-contained agent core (`telos-core`) implements
+the contract end to end: an LLM backend (OpenAI-compatible, deepseek
+default) with a tool registry and a tool-call loop. Without an API key the
+loop falls back to a canned backend, so the actus chat flow works with
+this binary attached either way.
 
 ## Position in the stack
 
@@ -32,7 +35,8 @@ the actus chat flow works with this binary attached.
 ## Layout
 
 - `crates/telos-protocol`: wire types for the actus contract
-- `crates/telos`: the headless binary, mock agent today, real agent later
+- `crates/telos-core`: self-contained agent core (LLM backend, tools, loop)
+- `crates/telos`: the headless binary over the core
 - `docs/upstream-sync.md`: upstream knowledge synchronization process
 - `index.qmd`: project documentation at the SSCCS index level
 

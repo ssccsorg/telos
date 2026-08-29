@@ -1,15 +1,17 @@
 //! Headless agent: connects to actus over WebSocket and serves the contract.
 //!
-//! The mock agent implements the full event and command surface of the actus
-//! contract so the actus `run.sh` chat flow works end to end with this binary
-//! attached. Streaming is simulated with cumulative `message_added` chunks and
-//! a canned tool-call entry, which exercises the same consumer paths a real
-//! agent would.
+//! Chat messages run through the telos-core agent loop. When an API key is
+//! configured the loop calls the LLM and executes tools; otherwise a canned
+//! backend keeps the flow alive. Every observable step is streamed to actus
+//! as contract events.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
+use telos_core::agent::{Agent, Step};
+use telos_core::llm::{CannedBackend, ChatBackend, OpenAiBackend};
+use telos_core::tools::ToolRegistry;
 use telos_protocol::{AgentCommand, AgentEvent};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
@@ -23,6 +25,10 @@ pub fn now_ts() -> i64 {
 
 fn wire(ev: AgentEvent) -> Message {
     Message::Text(serde_json::to_string(&ev).expect("event serializes").into())
+}
+
+fn new_id(prefix: &str) -> String {
+    format!("{prefix}-{}", uuid::Uuid::new_v4())
 }
 
 /// Connect to actus and serve the contract, reconnecting on drops with
@@ -84,7 +90,7 @@ where
                         let tid = match acp_thread_id {
                             Some(tid) => tid,
                             None => {
-                                let tid = format!("acp-{}", uuid::Uuid::new_v4());
+                                let tid = new_id("acp");
                                 write
                                     .send(wire(AgentEvent::ThreadCreated {
                                         acp_thread_id: tid.clone(),
@@ -94,7 +100,7 @@ where
                                 tid
                             }
                         };
-                        stream_answer(&mut write, &tid, &request_id, &message).await?;
+                        run_turn_and_stream(&mut write, &tid, &request_id, &message).await?;
                         // Keep the last request id so a late cancel still
                         // gets answered; actus drops duplicates via its
                         // consumed-request sentinel.
@@ -110,7 +116,7 @@ where
                         }
                     }
                     AgentCommand::ResolveToolCallAuthorization { .. } => {
-                        tracing::debug!("tool authorization resolved; mock ignores");
+                        tracing::debug!("tool authorization resolved; no pending ask");
                     }
                 }
             }
@@ -121,9 +127,9 @@ where
     Ok(())
 }
 
-/// Simulate a streaming answer: cumulative text chunks, a canned tool call,
-/// a final answer, then the completion event.
-async fn stream_answer<S>(
+/// Run one agent turn and stream its steps as contract events, ending with
+/// `message_completed`.
+async fn run_turn_and_stream<S>(
     write: &mut futures_util::stream::SplitSink<WebSocketStream<S>, Message>,
     tid: &str,
     request_id: &str,
@@ -132,65 +138,75 @@ async fn stream_answer<S>(
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let base = format!("Telos mock: received \"{message}\".\n");
-    let text_id = format!("m-{}", uuid::Uuid::new_v4());
+    let backend: Box<dyn ChatBackend> = match OpenAiBackend::from_env() {
+        Some(b) => Box::new(b),
+        None => Box::new(CannedBackend),
+    };
+    let agent = Agent::new(backend, ToolRegistry::default_tools());
+    let steps = agent.run_turn(message).await?;
 
-    let mut acc = String::new();
-    for chunk in [
-        format!("{base}Checking the workspace...\n"),
-        format!("{base}Checking the workspace...\nNothing to fix.\n"),
-    ] {
-        acc.push_str(&chunk);
-        write
-            .send(wire(AgentEvent::MessageAdded {
-                acp_thread_id: tid.into(),
-                message_id: text_id.clone(),
-                role: "assistant".into(),
-                content: acc.clone(),
-                request_id: request_id.into(),
-                entry_type: "text".into(),
-                tool_name: String::new(),
-                tool_status: String::new(),
-                timestamp: now_ts(),
-            }))
-            .await?;
-        tokio::time::sleep(Duration::from_millis(150)).await;
+    let mut last_id: Option<String> = None;
+    for step in steps {
+        match step {
+            Step::Thinking(content) => {
+                let id = new_id("m");
+                last_id = Some(id.clone());
+                write
+                    .send(wire(AgentEvent::MessageAdded {
+                        acp_thread_id: tid.into(),
+                        message_id: id,
+                        role: "assistant".into(),
+                        content,
+                        request_id: request_id.into(),
+                        entry_type: "text".into(),
+                        tool_name: String::new(),
+                        tool_status: String::new(),
+                        timestamp: now_ts(),
+                    }))
+                    .await?;
+            }
+            Step::ToolCall { name, status } => {
+                let id = new_id("t");
+                last_id = Some(id.clone());
+                write
+                    .send(wire(AgentEvent::MessageAdded {
+                        acp_thread_id: tid.into(),
+                        message_id: id,
+                        role: "assistant".into(),
+                        content: String::new(),
+                        request_id: request_id.into(),
+                        entry_type: "tool_call".into(),
+                        tool_name: name,
+                        tool_status: status,
+                        timestamp: now_ts(),
+                    }))
+                    .await?;
+            }
+            Step::Answer(content) => {
+                let id = new_id("m");
+                last_id = Some(id.clone());
+                write
+                    .send(wire(AgentEvent::MessageAdded {
+                        acp_thread_id: tid.into(),
+                        message_id: id,
+                        role: "assistant".into(),
+                        content,
+                        request_id: request_id.into(),
+                        entry_type: "text".into(),
+                        tool_name: String::new(),
+                        tool_status: String::new(),
+                        timestamp: now_ts(),
+                    }))
+                    .await?;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
-
-    let tool_id = format!("t-{}", uuid::Uuid::new_v4());
-    write
-        .send(wire(AgentEvent::MessageAdded {
-            acp_thread_id: tid.into(),
-            message_id: tool_id,
-            role: "assistant".into(),
-            content: String::new(),
-            request_id: request_id.into(),
-            entry_type: "tool_call".into(),
-            tool_name: "mock_tool".into(),
-            tool_status: "completed".into(),
-            timestamp: now_ts(),
-        }))
-        .await?;
-
-    let final_id = format!("m-{}", uuid::Uuid::new_v4());
-    write
-        .send(wire(AgentEvent::MessageAdded {
-            acp_thread_id: tid.into(),
-            message_id: final_id.clone(),
-            role: "assistant".into(),
-            content: "Done. Telos mock is operational.\n".into(),
-            request_id: request_id.into(),
-            entry_type: "text".into(),
-            tool_name: String::new(),
-            tool_status: String::new(),
-            timestamp: now_ts(),
-        }))
-        .await?;
 
     write
         .send(wire(AgentEvent::MessageCompleted {
             acp_thread_id: tid.into(),
-            message_id: final_id,
+            message_id: last_id.unwrap_or_else(|| new_id("m")),
             request_id: request_id.into(),
         }))
         .await?;

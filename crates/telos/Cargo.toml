@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 telos-protocol = { path = "../telos-protocol" }
+telos-core = { path = "../telos-core" }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.26"
 futures-util = "0.3"
