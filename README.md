@@ -54,5 +54,11 @@ The headless binary (`crates/telos-headless`) wires the agent core directly
 the editor, workspace, agent_ui, or collab UI stack. It speaks the actus
 WebSocket contract: connect, agent_ready, chat, tools, completion.
 
+The build disables `language_models/extension-support`, so wasm extension
+hosted LLM providers (and the wasmtime/cranelift chain they drag in) are
+compiled out; only the built-in anthropic, open_ai, and deepseek providers
+stay. Re-enable the feature in the workspace root if extension providers
+are ever needed.
+
 The repository is private. Licensing is TBD and is decided only if and when
 distribution is planned.
