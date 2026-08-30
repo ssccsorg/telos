@@ -8,10 +8,13 @@ use gpui::{App, Context, Entity};
 use language_model::{LanguageModelProviderId, LanguageModelRegistry};
 use provider::deepseek::DeepSeekLanguageModelProvider;
 
-pub mod extension;
 pub mod provider;
 mod settings;
 
+#[cfg(feature = "extension-support")]
+pub mod extension;
+
+#[cfg(feature = "extension-support")]
 pub use crate::extension::init_proxy as init_extension_proxy;
 
 use crate::provider::anthropic::AnthropicLanguageModelProvider;
@@ -34,6 +37,7 @@ pub fn init(user_store: Entity<UserStore>, client: Arc<Client>, cx: &mut App) {
     });
 
     // Subscribe to extension store events to track LLM extension installations
+    #[cfg(feature = "extension-support")]
     if let Some(extension_store) = extension_host::ExtensionStore::try_global(cx) {
         cx.subscribe(&extension_store, {
             let registry = registry.downgrade();
