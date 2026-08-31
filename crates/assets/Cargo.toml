@@ -8,6 +8,12 @@ license = "GPL-3.0-or-later"
 [lib]
 path = "src/assets.rs"
 
+[features]
+default = []
+# Embed the full UI asset set (fonts, icons, themes, sounds). Only the
+# desktop app (crates/zed) needs this; headless builds embed prompts only.
+full = []
+
 [lints]
 workspace = true
 
