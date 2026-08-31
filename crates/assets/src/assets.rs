@@ -4,25 +4,6 @@ use anyhow::Context as _;
 use gpui::{App, AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
 
-#[cfg(feature = "full")]
-#[derive(RustEmbed)]
-#[folder = "../../assets"]
-#[include = "fonts/**/*"]
-#[include = "icons/**/*"]
-#[include = "images/**/*"]
-#[include = "themes/**/*"]
-#[exclude = "themes/src/*"]
-#[include = "sounds/**/*"]
-#[include = "prompts/**/*"]
-#[include = "*.md"]
-#[exclude = "*.DS_Store"]
-pub struct Assets;
-
-// Headless builds (telos-headless) embed only what the agent needs: the
-// prompt templates. Fonts, icons, themes, and sounds are UI assets that
-// would otherwise bloat the headless binary by several megabytes for
-// nothing. The full UI app (crates/zed) enables the `full` feature.
-#[cfg(not(feature = "full"))]
 #[derive(RustEmbed)]
 #[folder = "../../assets"]
 #[include = "prompts/**/*"]
@@ -47,34 +28,5 @@ impl AssetSource for Assets {
                 }
             })
             .collect())
-    }
-}
-
-impl Assets {
-    /// Populate the [`TextSystem`] of the given [`AppContext`] with all `.ttf` fonts in the `fonts` directory.
-    #[cfg(feature = "full")]
-    pub fn load_fonts(&self, cx: &App) -> anyhow::Result<()> {
-        let font_paths = self.list("fonts")?;
-        let mut embedded_fonts = Vec::new();
-        for font_path in font_paths {
-            if font_path.ends_with(".ttf") {
-                let font_bytes = cx
-                    .asset_source()
-                    .load(&font_path)?
-                    .expect("Assets should never return None");
-                embedded_fonts.push(font_bytes);
-            }
-        }
-
-        cx.text_system().add_fonts(embedded_fonts)
-    }
-
-    #[cfg(feature = "full")]
-    pub fn load_test_fonts(&self, cx: &App) {
-        cx.text_system()
-            .add_fonts(vec![
-                self.load("fonts/lilex/Lilex-Regular.ttf").unwrap().unwrap(),
-            ])
-            .unwrap()
     }
 }
