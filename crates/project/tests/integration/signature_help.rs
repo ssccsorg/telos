@@ -47,10 +47,7 @@ fn test_create_signature_help_markdown_string_1(cx: &mut TestAppContext) {
         )
     );
     assert_eq!(
-        signature
-            .documentation
-            .unwrap()
-            .to_string(),
+        signature.documentation.unwrap().to_string(),
         "This is a test documentation",
     )
 }
@@ -93,10 +90,7 @@ fn test_create_signature_help_markdown_string_2(cx: &mut TestAppContext) {
         )
     );
     assert_eq!(
-        signature
-            .documentation
-            .unwrap()
-            .to_string(),
+        signature.documentation.unwrap().to_string(),
         "This is a test documentation",
     )
 }

@@ -38,8 +38,9 @@ struct LanguageServerRegistryProxy {
 
 impl ExtensionGrammarProxy for LanguageServerRegistryProxy {
     #[ztracing::instrument(skip_all)]
-    fn register_grammars(&self, grammars: Vec<(Arc<str>, PathBuf)>) {
-        self.language_registry.register_wasm_grammars(grammars)
+    fn register_grammars(&self, _grammars: Vec<(Arc<str>, PathBuf)>) {
+        // The headless graph has no wasm grammar loader; extension grammars
+        // are not supported.
     }
 }
 

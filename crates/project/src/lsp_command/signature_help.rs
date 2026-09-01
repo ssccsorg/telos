@@ -1,6 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
-use gpui::{App, AppContext, Entity, FontWeight, HighlightStyle, SharedString};
+use gpui::{App, FontWeight, HighlightStyle, SharedString};
 use language::LanguageRegistry;
 use lsp::LanguageServerId;
 use rpc::proto::{self, documentation};
@@ -33,7 +33,7 @@ impl SignatureHelp {
         help: lsp::SignatureHelp,
         _language_registry: Option<Arc<LanguageRegistry>>,
         lang_server_id: Option<LanguageServerId>,
-        cx: &mut App,
+        _cx: &mut App,
     ) -> Option<Self> {
         if help.signatures.is_empty() {
             return None;
@@ -99,10 +99,7 @@ impl SignatureHelp {
                         ));
                     }
 
-                    let documentation = parameter
-                        .documentation
-                        .as_ref()
-                        .map(documentation_to_text);
+                    let documentation = parameter.documentation.as_ref().map(documentation_to_text);
 
                     parameter_infos.push(ParameterInfo {
                         label_range,
@@ -111,10 +108,7 @@ impl SignatureHelp {
                 }
             }
 
-            let documentation = signature
-                .documentation
-                .as_ref()
-                .map(documentation_to_text);
+            let documentation = signature.documentation.as_ref().map(documentation_to_text);
 
             signatures.push(SignatureHelpData {
                 label,
