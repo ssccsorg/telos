@@ -5505,6 +5505,101 @@ mod tests {
     }
 
     #[gpui::test]
+    async fn test_message_serialization_formats_are_pinned(cx: &mut gpui::TestAppContext) {
+        init_test(cx);
+
+        let fs = FakeFs::new(cx.executor());
+        let project = Project::test(fs, [], cx).await;
+
+        cx.update(|cx| {
+            let language_registry =
+                Arc::new(LanguageRegistry::test(cx.background_executor().clone()));
+            let path_style = project.read(cx).path_style(cx);
+
+            let text_block = |text: &str, cx: &mut App| {
+                ContentBlock::new(
+                    acp::ContentBlock::Text(acp::TextContent::new(text)),
+                    &language_registry,
+                    path_style,
+                    cx,
+                )
+            };
+
+            // UserMessage serializes with the "## User" heading and trailing blank lines.
+            let user = UserMessage {
+                protocol_id: None,
+                client_id: None,
+                is_optimistic: false,
+                content: text_block("Hello, world!", cx),
+                chunks: vec![],
+                checkpoint: None,
+                indented: false,
+            };
+            assert_eq!(user.to_markdown(cx), "## User\n\nHello, world!\n\n");
+
+            // AssistantMessage keeps the "## Assistant" heading, thought chunks are
+            // wrapped in <thinking>, and content_only drops the heading for the ws sync.
+            let assistant = AssistantMessage {
+                chunks: vec![
+                    AssistantMessageChunk::Message {
+                        id: None,
+                        block: text_block("First", cx),
+                    },
+                    AssistantMessageChunk::Thought {
+                        id: None,
+                        block: text_block("Let me think", cx),
+                    },
+                    AssistantMessageChunk::Message {
+                        id: None,
+                        block: text_block("Answer", cx),
+                    },
+                ],
+                indented: false,
+                is_subagent_output: false,
+            };
+            assert_eq!(
+                assistant.to_markdown(cx),
+                "## Assistant\n\nFirst\n\n<thinking>\nLet me think\n</thinking>\n\nAnswer\n\n"
+            );
+            assert_eq!(
+                assistant.content_only(cx),
+                "First\n\n<thinking>\nLet me think\n</thinking>\n\nAnswer"
+            );
+
+            // ToolCall serializes label, status, and each content block.
+            let tool_call = ToolCall {
+                id: acp::ToolCallId::new("tool_1"),
+                label: cx.new(|cx| Markdown::new("ls".into(), None, None, cx)),
+                kind: acp::ToolKind::Execute,
+                content: vec![ToolCallContent::ContentBlock(text_block("output", cx))],
+                status: ToolCallStatus::Completed,
+                locations: vec![],
+                resolved_locations: vec![],
+                raw_input: None,
+                raw_input_markdown: None,
+                raw_output: None,
+                tool_name: None,
+                subagent_session_info: None,
+                sandbox_authorization_details: None,
+                sandbox_fallback_authorization_details: None,
+                sandbox_not_applied: None,
+            };
+            assert_eq!(
+                tool_call.to_markdown(cx),
+                "**Tool Call: ls**\nStatus: Completed\n\noutput\n\n"
+            );
+
+            // Entry-level variants: compaction has a fixed marker.
+            let compaction = AgentThreadEntry::ContextCompaction(ContextCompaction {
+                id: ContextCompactionId("compact_1".into()),
+                status: ContextCompactionStatus::Completed,
+                summary: None,
+            });
+            assert_eq!(compaction.to_markdown(cx), "--- Context Compacted ---\n\n");
+        });
+    }
+
+    #[gpui::test]
     async fn test_user_message_chunks_use_protocol_message_id_boundaries(
         cx: &mut gpui::TestAppContext,
     ) {
