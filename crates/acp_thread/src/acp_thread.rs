@@ -1562,7 +1562,6 @@ impl ContentBlock {
                 Some(language_registry.clone()),
                 None,
                 MarkdownOptions {
-                    render_mermaid_diagrams: true,
                     render_metadata_blocks: true,
                     ..Default::default()
                 },
@@ -2409,26 +2408,6 @@ impl AcpThread {
                 AgentThreadEntry::ContextCompaction(compaction) if compaction.is_in_progress()
             )
         })
-    }
-
-    pub fn invalidate_mermaid_caches(&self, cx: &mut App) {
-        for entry in &self.entries {
-            let chunks = match entry {
-                AgentThreadEntry::AssistantMessage(message) => &message.chunks,
-                _ => continue,
-            };
-            for chunk in chunks {
-                let block = match chunk {
-                    AssistantMessageChunk::Message { block, .. } => block,
-                    AssistantMessageChunk::Thought { block, .. } => block,
-                };
-                if let Some(markdown) = block.markdown() {
-                    markdown.update(cx, |markdown, cx| {
-                        markdown.invalidate_mermaid_cache(cx);
-                    });
-                }
-            }
-        }
     }
 
     pub fn session_id(&self) -> &acp::SessionId {
