@@ -1,6 +1,8 @@
 use agent_client_protocol::schema::v1 as acp;
 use anyhow::{Context as _, Result, bail};
 use file_icons::FileIcons;
+use gpui::{App, SharedString};
+use icons::IconName;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -8,7 +10,6 @@ use std::{
     ops::RangeInclusive,
     path::{Path, PathBuf},
 };
-use ui::{App, IconName, SharedString};
 use url::Url;
 use urlencoding::decode;
 use util::{

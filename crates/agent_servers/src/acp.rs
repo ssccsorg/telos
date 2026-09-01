@@ -2157,8 +2157,8 @@ pub mod test_support {
     }
 
     impl crate::AgentServer for FakeAcpAgentServer {
-        fn logo(&self) -> ui::IconName {
-            ui::IconName::ZedAgent
+        fn logo(&self) -> icons::IconName {
+            icons::IconName::ZedAgent
         }
 
         fn agent_id(&self) -> AgentId {

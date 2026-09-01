@@ -30,7 +30,6 @@ client.workspace = true
 cloud_api_client.workspace = true
 cloud_api_types.workspace = true
 collections.workspace = true
-component.workspace = true
 convert_case.workspace = true
 credentials_provider.workspace = true
 deepseek = { workspace = true, features = ["schemars"] }
@@ -48,7 +47,6 @@ language_models_cloud.workspace = true
 
 
 log.workspace = true
-menu.workspace = true
 
 
 open_ai = { workspace = true, features = ["schemars"] }
@@ -63,8 +61,7 @@ settings.workspace = true
 sha2.workspace = true
 strum.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
-ui.workspace = true
-ui_input.workspace = true
+icons.workspace = true
 util.workspace = true
 
 
@@ -79,6 +76,3 @@ http_client = { workspace = true, features = ["test-support"] }
 language_model = { workspace = true, features = ["test-support"] }
 parking_lot.workspace = true
 settings = { workspace = true, features = ["test-support"] }
-
-[package.metadata.cargo-shear]
-ignored = ["component"]

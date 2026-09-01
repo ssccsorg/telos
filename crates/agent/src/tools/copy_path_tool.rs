@@ -10,7 +10,7 @@ use crate::{
 use agent_client_protocol::schema::v1 as acp;
 use agent_settings::AgentSettings;
 use futures::FutureExt as _;
-use gpui::{App, Entity, Task};
+use gpui::{App, Entity, SharedString, Task};
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -72,7 +72,7 @@ impl AgentTool for CopyPathTool {
         &self,
         input: Result<Self::Input, serde_json::Value>,
         _cx: &mut App,
-    ) -> ui::SharedString {
+    ) -> SharedString {
         if let Ok(input) = input {
             let src = MarkdownInlineCode(&input.source_path);
             let dest = MarkdownInlineCode(&input.destination_path);

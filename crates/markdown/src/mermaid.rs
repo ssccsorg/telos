@@ -1,15 +1,15 @@
 use collections::HashMap;
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, ClipboardItem, Context, Entity, ImageSource,
-    ParsedSvg, RenderImage, SMOOTH_SVG_SCALE_FACTOR, ScrollDelta, ScrollHandle, ScrollWheelEvent,
-    Size, Stateful, StyledText, Task, Window, img, pulsating_between, size,
+    Animation, AnimationExt, AnyElement, App, ClickEvent, ClipboardItem, Context, Entity,
+    ImageSource, ParsedSvg, RenderImage, SMOOTH_SVG_SCALE_FACTOR, ScrollDelta, ScrollHandle,
+    ScrollWheelEvent, Size, Stateful, StyledText, Task, Window, img, pulsating_between, size,
 };
 use std::collections::BTreeMap;
 use std::ops::Range;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use ui::{CopyButton, ScrollAxes, Scrollbars, TintColor, Tooltip, WithScrollbar, prelude::*};
+use ui::{CopyButton, ScrollAxes, Scrollbars, Tooltip, WithScrollbar, prelude::*};
 
 use crate::parser::{CodeBlockKind, MarkdownEvent, MarkdownTag};
 use settings::Settings as _;
@@ -622,6 +622,7 @@ pub(crate) fn render_mermaid_diagram(
                         source_offset,
                         showing_code,
                         markdown.clone(),
+                        cx,
                     ))
                 })
                 .child(body)
@@ -695,6 +696,7 @@ pub(crate) fn render_mermaid_diagram(
                             source_offset,
                             showing_code,
                             markdown.clone(),
+                            cx,
                         ))
                     })
                     .child(body)
@@ -798,10 +800,35 @@ fn with_mermaid_horizontal_scrollbar(
         .into_any_element()
 }
 
+/// A compact tab button for the Preview/Code switcher. Uses a plain gpui
+/// element instead of the full `ui::Button` widget, which the headless
+/// workspace no longer ships.
+fn render_mermaid_tab_button(
+    id: ElementId,
+    label: &'static str,
+    selected: bool,
+    colors: &theme::ThemeColors,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .cursor_pointer()
+        .px_1p5()
+        .py_0p5()
+        .rounded_md()
+        .when(selected, |this| {
+            this.bg(colors.element_selected)
+                .text_color(colors.text_accent)
+        })
+        .child(Label::new(label).size(LabelSize::Small))
+        .on_click(on_click)
+}
+
 fn render_mermaid_tab_header(
     source_offset: usize,
     showing_code: bool,
     markdown: Entity<Markdown>,
+    cx: &mut App,
 ) -> impl IntoElement {
     let preview_id = ElementId::NamedChild(
         Arc::new(ElementId::from((
@@ -816,38 +843,39 @@ fn render_mermaid_tab_header(
     );
     let preview_markdown = markdown.clone();
     let code_markdown = markdown;
+    let colors = cx.theme().colors();
 
     h_flex()
         .gap_0p5()
         .mb_2p5()
-        .child(
-            Button::new(preview_id, "Preview")
-                .label_size(LabelSize::Small)
-                .selected_style(ButtonStyle::Tinted(TintColor::Accent))
-                .toggle_state(!showing_code)
-                .on_click(move |_event, _window, cx| {
-                    preview_markdown.update(cx, |md, cx| {
-                        if md.is_mermaid_showing_code(source_offset) {
-                            md.toggle_mermaid_tab(source_offset);
-                            cx.notify();
-                        }
-                    });
-                }),
-        )
-        .child(
-            Button::new(code_id, "Code")
-                .label_size(LabelSize::Small)
-                .selected_style(ButtonStyle::Tinted(TintColor::Accent))
-                .toggle_state(showing_code)
-                .on_click(move |_event, _window, cx| {
-                    code_markdown.update(cx, |md, cx| {
-                        if !md.is_mermaid_showing_code(source_offset) {
-                            md.toggle_mermaid_tab(source_offset);
-                            cx.notify();
-                        }
-                    });
-                }),
-        )
+        .child(render_mermaid_tab_button(
+            preview_id,
+            "Preview",
+            !showing_code,
+            colors,
+            move |_event, _window, cx| {
+                preview_markdown.update(cx, |md, cx| {
+                    if md.is_mermaid_showing_code(source_offset) {
+                        md.toggle_mermaid_tab(source_offset);
+                        cx.notify();
+                    }
+                });
+            },
+        ))
+        .child(render_mermaid_tab_button(
+            code_id,
+            "Code",
+            showing_code,
+            colors,
+            move |_event, _window, cx| {
+                code_markdown.update(cx, |md, cx| {
+                    if !md.is_mermaid_showing_code(source_offset) {
+                        md.toggle_mermaid_tab(source_offset);
+                        cx.notify();
+                    }
+                });
+            },
+        ))
 }
 
 /// The overlay controls anchored to the top-right corner of a diagram: an

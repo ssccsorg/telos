@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use ::settings::{Settings, SettingsStore};
 use client::{Client, UserStore};
-use collections::{HashMap, HashSet};
+use collections::HashMap;
+#[cfg(feature = "extension-support")]
+use collections::HashSet;
 use credentials_provider::CredentialsProvider;
 use gpui::{App, Context, Entity};
 use language_model::{LanguageModelProviderId, LanguageModelRegistry};
@@ -206,7 +208,7 @@ fn register_compatible_providers(
 
 fn register_language_model_providers(
     registry: &mut LanguageModelRegistry,
-    user_store: Entity<UserStore>,
+    _user_store: Entity<UserStore>,
     client: Arc<Client>,
     credentials_provider: Arc<dyn CredentialsProvider>,
     cx: &mut Context<LanguageModelRegistry>,
@@ -247,11 +249,11 @@ mod tests {
     use feature_flags::FeatureFlagAppExt as _;
     use gpui::{AppContext as _, AsyncApp, BorrowAppContext as _};
     use http_client::FakeHttpClient;
+    use icons::IconName;
     use language_model::IconOrSvg;
     use release_channel::AppVersion;
     use std::future::Future;
     use std::pin::Pin;
-    use ui::IconName;
 
     struct FakeCredentialsProvider;
 

@@ -1,14 +1,13 @@
 use crate::{AgentTool, ToolCallEventStream, ToolInput};
 use agent_client_protocol::schema::v1 as acp;
 use futures::{Future, FutureExt as _};
-use gpui::{App, AsyncApp, Entity, Task};
+use gpui::{App, AsyncApp, Entity, SharedString, Task};
 use language::{DiagnosticSeverity, OffsetRangeExt};
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::{fmt::Write, sync::Arc};
-use ui::SharedString;
 use util::markdown::MarkdownInlineCode;
 
 type Result<T, E = String> = core::result::Result<T, E>;

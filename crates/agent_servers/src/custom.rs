@@ -5,6 +5,7 @@ use anyhow::{Context as _, Result};
 use collections::HashSet;
 use fs::Fs;
 use gpui::{App, AppContext as _, Entity, Task};
+use icons::IconName;
 use language_model::{ApiKey, EnvVar};
 use project::{
     Project,
@@ -12,7 +13,6 @@ use project::{
 };
 use settings::{AgentConfigOptionValue, SettingsStore, update_settings_file};
 use std::{rc::Rc, sync::Arc};
-use ui::IconName;
 
 pub const GEMINI_ID: &str = "gemini";
 pub const CLAUDE_AGENT_ID: &str = "claude-acp";
@@ -334,12 +334,12 @@ fn default_settings_for_agent() -> settings::CustomAgentServerSettings {
 mod tests {
     use super::*;
     use collections::HashMap;
+    use gpui::SharedString;
     use gpui::TestAppContext;
     use project::agent_registry_store::{
         AgentRegistryStore, RegistryAgent, RegistryAgentMetadata, RegistryNpxAgent,
     };
     use settings::Settings as _;
-    use ui::SharedString;
 
     fn init_test(cx: &mut TestAppContext) {
         cx.update(|cx| {

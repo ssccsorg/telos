@@ -3,28 +3,22 @@ use anthropic::{AnthropicError, AnthropicModelMode};
 use anyhow::Result;
 use credentials_provider::CredentialsProvider;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
-use gpui::{App, AppContext, AsyncApp, Entity, Task};
+use gpui::{App, AsyncApp, Entity, Task};
 use http_client::{CustomHeaders, HttpClient};
+use icons::IconName;
 use language_model::{
     AuthenticateError, IconOrSvg, LanguageModel, LanguageModelCompletionError,
     LanguageModelCompletionEvent, LanguageModelId, LanguageModelName, LanguageModelProvider,
     LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
     LanguageModelRequest, LanguageModelToolChoice, ProviderSettingsView, RateLimiter,
-    SubPageProviderSettings,
 };
 use settings::Settings;
 use std::sync::Arc;
-use ui::IconName;
 
-use crate::provider::api_compatible::{
-    ApiCompatibleProviderConfigurationView, ApiCompatibleProviderSettings,
-    ApiCompatibleProviderState,
-};
+use crate::provider::api_compatible::{ApiCompatibleProviderSettings, ApiCompatibleProviderState};
 
 pub use settings::AnthropicCompatibleAvailableModel as AvailableModel;
 pub use settings::AnthropicCompatibleModelCapabilities as ModelCapabilities;
-
-const API_KEY_PLACEHOLDER: &str = "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct AnthropicCompatibleSettings {
@@ -267,21 +261,7 @@ impl LanguageModelProvider for AnthropicCompatibleLanguageModelProvider {
     }
 
     fn settings_view(&self, _cx: &mut App) -> Option<ProviderSettingsView> {
-        let state = self.state.clone();
-        Some(ProviderSettingsView::SubPage(SubPageProviderSettings::new(
-            move |window, cx| {
-                cx.new(|cx| {
-                    ApiCompatibleProviderConfigurationView::new(
-                        state.clone(),
-                        "Anthropic",
-                        API_KEY_PLACEHOLDER,
-                        window,
-                        cx,
-                    )
-                })
-                .into()
-            },
-        )))
+        None
     }
 
     fn set_api_key(&self, api_key: Option<String>, cx: &mut App) -> Task<Result<()>> {

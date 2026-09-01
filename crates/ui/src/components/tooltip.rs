@@ -2,10 +2,11 @@ use std::borrow::Borrow;
 use std::rc::Rc;
 
 use crate::prelude::*;
-use crate::{Color, KeyBinding, Label, LabelSize, StyledExt, h_flex, v_flex};
-use gpui::{Action, AnyElement, AnyView, AppContext, FocusHandle, IntoElement, Render};
+use crate::{Color, KeyBinding, Label, LabelCommon, LabelSize, StyledExt, h_flex, v_flex};
+use gpui::{
+    Action, AnyElement, AnyView, AppContext, Div, FocusHandle, IntoElement, Render, Window, div,
+};
 
-#[derive(RegisterComponent)]
 pub struct Tooltip {
     title: Title,
     meta: Option<SharedString>,
@@ -231,61 +232,4 @@ where
             .px_2()
             .map(|el| f(el, cx)),
     )
-}
-
-pub struct LinkPreview {
-    link: SharedString,
-}
-
-impl LinkPreview {
-    pub fn new(url: &str, cx: &mut App) -> AnyView {
-        let mut wrapped_url = String::new();
-        for (i, ch) in url.chars().enumerate() {
-            if i == 500 {
-                wrapped_url.push('…');
-                break;
-            }
-            if i % 100 == 0 && i != 0 {
-                wrapped_url.push('\n');
-            }
-            wrapped_url.push(ch);
-        }
-        cx.new(|_| LinkPreview {
-            link: wrapped_url.into(),
-        })
-        .into()
-    }
-}
-
-impl Render for LinkPreview {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        tooltip_container(cx, |el, _| {
-            el.child(
-                Label::new(self.link.clone())
-                    .size(LabelSize::XSmall)
-                    .color(Color::Muted),
-            )
-        })
-    }
-}
-
-impl Component for Tooltip {
-    fn scope() -> ComponentScope {
-        ComponentScope::DataDisplay
-    }
-
-    fn description() -> &'static str {
-        "A tooltip that appears when hovering over an element, \
-        optionally showing a keybinding or additional metadata."
-    }
-
-    fn preview(_window: &mut Window, _cx: &mut App) -> AnyElement {
-        example_group(vec![single_example(
-            "Text only",
-            Button::new("delete-example", "Delete")
-                .tooltip(Tooltip::text("This is a tooltip!"))
-                .into_any_element(),
-        )])
-        .into_any_element()
-    }
 }

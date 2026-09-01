@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{Hsla, IntoElement, Point, svg};
+use gpui::{Hsla, IntoElement, Pixels, Point, SharedString, Window, div, px, svg};
 use strum::{EnumIter, EnumString, IntoStaticStr};
 
 use crate::prelude::*;
