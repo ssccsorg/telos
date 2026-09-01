@@ -1,3 +1,4 @@
+use crate::MessageText;
 use agent_client_protocol::schema::v1 as acp;
 use anyhow::Result;
 use collections::HashMap;
@@ -5,7 +6,6 @@ use futures::{FutureExt as _, future::Shared};
 use gpui::{App, AppContext, AsyncApp, Context, Entity, Task};
 use http_proxy::Allowlist;
 use language::LanguageRegistry;
-use crate::MessageText;
 use project::Project;
 use serde::{Deserialize, Serialize};
 use std::{

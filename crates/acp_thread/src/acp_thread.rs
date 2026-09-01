@@ -1583,9 +1583,9 @@ impl ContentBlock {
         cx: &mut App,
     ) -> Option<Entity<MessageText>> {
         match &resource.resource {
-            acp::EmbeddedResourceResource::TextResourceContents(text) => {
-                Some(Self::create_markdown(Self::text_resource_markdown(text), cx))
-            }
+            acp::EmbeddedResourceResource::TextResourceContents(text) => Some(
+                Self::create_markdown(Self::text_resource_markdown(text), cx),
+            ),
             acp::EmbeddedResourceResource::BlobResourceContents(_) => None,
             _ => None,
         }
@@ -1670,7 +1670,9 @@ impl ContentBlock {
         }
     }
 
-    pub fn embedded_resource(&self) -> Option<(&acp::EmbeddedResource, Option<&Entity<MessageText>>)> {
+    pub fn embedded_resource(
+        &self,
+    ) -> Option<(&acp::EmbeddedResource, Option<&Entity<MessageText>>)> {
         match self {
             ContentBlock::EmbeddedResource { resource, markdown } => {
                 Some((resource, markdown.as_ref()))
@@ -3039,7 +3041,8 @@ impl AcpThread {
 
         if !update.summary_delta.is_empty() {
             if compaction.summary.is_none() {
-                compaction.summary = Some(cx.new(|_cx| MessageText::new(update.summary_delta.clone())));
+                compaction.summary =
+                    Some(cx.new(|_cx| MessageText::new(update.summary_delta.clone())));
             } else if let Some(summary) = compaction.summary.clone() {
                 summary.update(cx, |markdown, _| markdown.append(&update.summary_delta));
             }
