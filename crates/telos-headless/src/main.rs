@@ -6,16 +6,18 @@
 //! include those crates, so a binary rooted here excludes them from the
 //! build entirely.
 
+mod fake_backend;
+
 use std::sync::Arc;
 
 use anyhow::Result;
 use client::{Client, UserStore};
 use fs::{Fs, RealFs};
 use gpui::{App, AppContext as _, Application, TaskExt as _};
-use settings::Settings as _;
 use language::LanguageRegistry;
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
-use project::{Project, project_settings::ProjectSettings};
+use project::{project_settings::ProjectSettings, Project};
+use settings::Settings as _;
 use watch;
 
 fn main() {
@@ -70,7 +72,22 @@ fn run_headless(cx: &mut App) -> Result<()> {
     language_model::init(cx);
     agent::ThreadStore::init_global(cx);
     prompt_store::init(cx);
-    language_models::init(user_store.clone(), client.clone(), cx);
+
+    // Deterministic test backend: respond to every prompt with a fixed
+    // message so the actus contract can be verified without an LLM API key
+    // and without model variance. When active, skip the real providers so
+    // the fake is the only authenticated provider.
+    let fake_backend = std::env::var("TELOS_FAKE_BACKEND").is_ok();
+    if fake_backend {
+        use language_model::LanguageModelRegistry;
+        let fake = Arc::new(crate::fake_backend::FakeBackendProvider::default());
+        LanguageModelRegistry::global(cx).update(cx, |registry, cx| {
+            registry.register_provider(fake, cx);
+            registry.set_should_use_fallback(true);
+        });
+    } else {
+        language_models::init(user_store.clone(), client.clone(), cx);
+    }
 
     // Headless project with trusted worktrees.
     let mut project_settings = ProjectSettings::get_global(cx).clone();
