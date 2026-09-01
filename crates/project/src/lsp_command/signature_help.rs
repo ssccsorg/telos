@@ -3,7 +3,6 @@ use std::{ops::Range, sync::Arc};
 use gpui::{App, AppContext, Entity, FontWeight, HighlightStyle, SharedString};
 use language::LanguageRegistry;
 use lsp::LanguageServerId;
-use markdown::Markdown;
 use rpc::proto::{self, documentation};
 use util::maybe;
 
@@ -17,7 +16,7 @@ pub struct SignatureHelp {
 #[derive(Debug, Clone)]
 pub struct SignatureHelpData {
     pub label: SharedString,
-    pub documentation: Option<Entity<Markdown>>,
+    pub documentation: Option<SharedString>,
     pub highlights: Vec<(Range<usize>, HighlightStyle)>,
     pub active_parameter: Option<usize>,
     pub parameters: Vec<ParameterInfo>,
@@ -26,13 +25,13 @@ pub struct SignatureHelpData {
 #[derive(Debug, Clone)]
 pub struct ParameterInfo {
     pub label_range: Option<Range<usize>>,
-    pub documentation: Option<Entity<Markdown>>,
+    pub documentation: Option<SharedString>,
 }
 
 impl SignatureHelp {
     pub fn new(
         help: lsp::SignatureHelp,
-        language_registry: Option<Arc<LanguageRegistry>>,
+        _language_registry: Option<Arc<LanguageRegistry>>,
         lang_server_id: Option<LanguageServerId>,
         cx: &mut App,
     ) -> Option<Self> {
@@ -103,7 +102,7 @@ impl SignatureHelp {
                     let documentation = parameter
                         .documentation
                         .as_ref()
-                        .map(|doc| documentation_to_markdown(doc, language_registry.clone(), cx));
+                        .map(documentation_to_text);
 
                     parameter_infos.push(ParameterInfo {
                         label_range,
@@ -115,7 +114,7 @@ impl SignatureHelp {
             let documentation = signature
                 .documentation
                 .as_ref()
-                .map(|doc| documentation_to_markdown(doc, language_registry.clone(), cx));
+                .map(documentation_to_text);
 
             signatures.push(SignatureHelpData {
                 label,
@@ -133,27 +132,13 @@ impl SignatureHelp {
     }
 }
 
-fn documentation_to_markdown(
-    documentation: &lsp::Documentation,
-    language_registry: Option<Arc<LanguageRegistry>>,
-    cx: &mut App,
-) -> Entity<Markdown> {
+fn documentation_to_text(documentation: &lsp::Documentation) -> SharedString {
     match documentation {
-        lsp::Documentation::String(string) => {
-            cx.new(|cx| Markdown::new_text(SharedString::from(string), cx))
-        }
+        lsp::Documentation::String(string) => SharedString::from(string),
         lsp::Documentation::MarkupContent(markup) => match markup.kind {
-            lsp::MarkupKind::PlainText => {
-                cx.new(|cx| Markdown::new_text(SharedString::from(&markup.value), cx))
+            lsp::MarkupKind::PlainText | lsp::MarkupKind::Markdown => {
+                SharedString::from(&markup.value)
             }
-            lsp::MarkupKind::Markdown => cx.new(|cx| {
-                Markdown::new(
-                    SharedString::from(&markup.value),
-                    language_registry,
-                    None,
-                    cx,
-                )
-            }),
         },
     }
 }

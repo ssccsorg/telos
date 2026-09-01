@@ -20,8 +20,40 @@ use language::language_settings::FormatOnSave;
 use language::{
     Anchor, Buffer, BufferEditSource, BufferSnapshot, LanguageRegistry, Point, ToPoint, text_diff,
 };
-use markdown::{Markdown, MarkdownOptions};
 pub use mention::*;
+
+/// Textual message content. The headless graph never renders markdown, so
+/// message content is carried as plain text instead of the rendering
+/// `markdown::Markdown` component.
+#[derive(Debug, Clone, Default)]
+pub struct MessageText {
+    source: SharedString,
+}
+
+impl MessageText {
+    pub fn new(source: impl Into<SharedString>) -> Self {
+        Self {
+            source: source.into(),
+        }
+    }
+
+    pub fn source(&self) -> &SharedString {
+        &self.source
+    }
+
+    pub fn append(&mut self, text: &str) {
+        self.source = SharedString::new(self.source.to_string() + text);
+    }
+
+    pub fn reset(&mut self, source: impl Into<SharedString>) {
+        self.source = source.into();
+    }
+
+    pub fn replace(&mut self, source: impl Into<SharedString>) {
+        self.source = source.into();
+    }
+}
+
 use project::lsp_store::{FormatTrigger, LspFormatTarget};
 use project::{
     AgentLocation, Project,
@@ -777,7 +809,7 @@ pub struct ContextCompaction {
     pub status: ContextCompactionStatus,
     /// The compaction summary, streamed in as the model produces it. This is
     /// `None` for provider-native compaction, which produces no summary to show.
-    pub summary: Option<Entity<Markdown>>,
+    pub summary: Option<Entity<MessageText>>,
 }
 
 impl ContextCompaction {
@@ -867,14 +899,14 @@ impl AgentThreadEntry {
 #[derive(Debug)]
 pub struct ToolCall {
     pub id: acp::ToolCallId,
-    pub label: Entity<Markdown>,
+    pub label: Entity<MessageText>,
     pub kind: acp::ToolKind,
     pub content: Vec<ToolCallContent>,
     pub status: ToolCallStatus,
     pub locations: Vec<acp::ToolCallLocation>,
     pub resolved_locations: Vec<Option<AgentLocation>>,
     pub raw_input: Option<serde_json::Value>,
-    pub raw_input_markdown: Option<Entity<Markdown>>,
+    pub raw_input_markdown: Option<Entity<MessageText>>,
     pub raw_output: Option<serde_json::Value>,
     pub tool_name: Option<SharedString>,
     pub subagent_session_info: Option<SubagentSessionInfo>,
@@ -931,11 +963,7 @@ impl ToolCall {
             sandbox_fallback_authorization_details_from_meta(&tool_call.meta);
         let sandbox_not_applied = sandbox_not_applied_from_meta(&tool_call.meta);
 
-        let label = if tool_call.kind == acp::ToolKind::Execute {
-            cx.new(|cx| Markdown::new_text(title.into(), cx))
-        } else {
-            cx.new(|cx| Markdown::new(title.into(), Some(language_registry.clone()), None, cx))
-        };
+        let label = cx.new(|_cx| MessageText::new(title));
 
         let result = Self {
             id: tool_call.tool_call_id,
@@ -1010,15 +1038,15 @@ impl ToolCall {
                     });
                 }
             }
-            self.label.update(cx, |label, cx| {
+            self.label.update(cx, |label, _| {
                 if self.kind == acp::ToolKind::Execute {
-                    label.replace(title, cx);
+                    label.replace(title);
                 } else if self.kind == acp::ToolKind::Edit {
-                    label.replace(MarkdownEscaped(&title).to_string(), cx)
+                    label.replace(MarkdownEscaped(&title).to_string())
                 } else if let Some((first_line, _)) = title.split_once("\n") {
-                    label.replace(first_line.to_owned() + "…", cx);
+                    label.replace(first_line.to_owned() + "…");
                 } else {
-                    label.replace(title, cx);
+                    label.replace(title);
                 }
             });
         }
@@ -1355,11 +1383,11 @@ fn elicitation_status_for_response(response: &acp::CreateElicitationResponse) ->
 pub enum ContentBlock {
     Empty,
     Markdown {
-        markdown: Entity<Markdown>,
+        markdown: Entity<MessageText>,
     },
     EmbeddedResource {
         resource: acp::EmbeddedResource,
-        markdown: Option<Entity<Markdown>>,
+        markdown: Option<Entity<MessageText>>,
     },
     ResourceLink {
         resource_link: acp::ResourceLink,
@@ -1406,8 +1434,7 @@ impl ContentBlock {
                 if let Some((image, dimensions)) = Self::decode_embedded_resource_image(&resource) {
                     Self::Image { image, dimensions }
                 } else {
-                    let markdown =
-                        Self::embedded_resource_markdown(&resource, language_registry, cx);
+                    let markdown = Self::embedded_resource_markdown(&resource, cx);
                     Self::EmbeddedResource { resource, markdown }
                 }
             }
@@ -1418,7 +1445,7 @@ impl ContentBlock {
     pub fn append(
         &mut self,
         block: acp::ContentBlock,
-        language_registry: &Arc<LanguageRegistry>,
+        _language_registry: &Arc<LanguageRegistry>,
         path_style: PathStyle,
         cx: &mut App,
     ) {
@@ -1433,34 +1460,34 @@ impl ContentBlock {
                     *self = ContentBlock::Image { image, dimensions };
                 } else {
                     let new_content = Self::image_md(image_content);
-                    *self = Self::create_markdown_block(new_content, language_registry, cx);
+                    *self = Self::create_markdown_block(new_content, cx);
                 }
             }
             (ContentBlock::Empty, _) => {
                 let new_content = Self::block_string_contents(&block, path_style);
-                *self = Self::create_markdown_block(new_content, language_registry, cx);
+                *self = Self::create_markdown_block(new_content, cx);
             }
             (ContentBlock::Markdown { markdown }, _) => {
                 let new_content = Self::block_string_contents(&block, path_style);
-                markdown.update(cx, |markdown, cx| markdown.append(&new_content, cx));
+                markdown.update(cx, |markdown, _| markdown.append(&new_content));
             }
             (ContentBlock::ResourceLink { resource_link }, _) => {
                 let existing_content = Self::resource_link_md(&resource_link.uri, path_style);
                 let new_content = Self::block_string_contents(&block, path_style);
                 let combined = format!("{}\n{}", existing_content, new_content);
-                *self = Self::create_markdown_block(combined, language_registry, cx);
+                *self = Self::create_markdown_block(combined, cx);
             }
             (ContentBlock::EmbeddedResource { resource, .. }, _) => {
                 let existing_content =
                     Self::embedded_resource_string_contents(resource, path_style);
                 let new_content = Self::block_string_contents(&block, path_style);
                 let combined = format!("{}\n{}", existing_content, new_content);
-                *self = Self::create_markdown_block(combined, language_registry, cx);
+                *self = Self::create_markdown_block(combined, cx);
             }
             (ContentBlock::Image { .. }, _) => {
                 let new_content = Self::block_string_contents(&block, path_style);
                 let combined = format!("`Image`\n{}", new_content);
-                *self = Self::create_markdown_block(combined, language_registry, cx);
+                *self = Self::create_markdown_block(combined, cx);
             }
         }
     }
@@ -1481,12 +1508,12 @@ impl ContentBlock {
             return false;
         };
         let new_content = &text_content.text;
-        markdown.update(cx, |markdown, cx| {
+        markdown.update(cx, |markdown, _| {
             let current = markdown.source().to_string();
             match new_content.strip_prefix(&current) {
                 Some("") => {}
-                Some(suffix) => markdown.append(suffix, cx),
-                None => markdown.reset(new_content.clone().into(), cx),
+                Some(suffix) => markdown.append(suffix),
+                None => markdown.reset(new_content.clone()),
             }
         });
         true
@@ -1541,44 +1568,24 @@ impl ContentBlock {
             .map(|(width, height)| gpui::Size { width, height })
     }
 
-    fn create_markdown_block(
-        content: String,
-        language_registry: &Arc<LanguageRegistry>,
-        cx: &mut App,
-    ) -> ContentBlock {
+    fn create_markdown_block(content: String, cx: &mut App) -> ContentBlock {
         ContentBlock::Markdown {
-            markdown: Self::create_markdown(content, language_registry, cx),
+            markdown: Self::create_markdown(content, cx),
         }
     }
 
-    fn create_markdown(
-        content: String,
-        language_registry: &Arc<LanguageRegistry>,
-        cx: &mut App,
-    ) -> Entity<Markdown> {
-        cx.new(|cx| {
-            Markdown::new_with_options(
-                content.into(),
-                Some(language_registry.clone()),
-                None,
-                MarkdownOptions {
-                    render_metadata_blocks: true,
-                    ..Default::default()
-                },
-                cx,
-            )
-        })
+    fn create_markdown(content: String, cx: &mut App) -> Entity<MessageText> {
+        cx.new(|_cx| MessageText::new(content))
     }
 
     fn embedded_resource_markdown(
         resource: &acp::EmbeddedResource,
-        language_registry: &Arc<LanguageRegistry>,
         cx: &mut App,
-    ) -> Option<Entity<Markdown>> {
+    ) -> Option<Entity<MessageText>> {
         match &resource.resource {
-            acp::EmbeddedResourceResource::TextResourceContents(text) => Some(
-                Self::create_markdown(Self::text_resource_markdown(text), language_registry, cx),
-            ),
+            acp::EmbeddedResourceResource::TextResourceContents(text) => {
+                Some(Self::create_markdown(Self::text_resource_markdown(text), cx))
+            }
             acp::EmbeddedResourceResource::BlobResourceContents(_) => None,
             _ => None,
         }
@@ -1663,7 +1670,7 @@ impl ContentBlock {
         }
     }
 
-    pub fn embedded_resource(&self) -> Option<(&acp::EmbeddedResource, Option<&Entity<Markdown>>)> {
+    pub fn embedded_resource(&self) -> Option<(&acp::EmbeddedResource, Option<&Entity<MessageText>>)> {
         match self {
             ContentBlock::EmbeddedResource { resource, markdown } => {
                 Some((resource, markdown.as_ref()))
@@ -1731,7 +1738,7 @@ impl ContentBlock {
         }
     }
 
-    pub fn markdown(&self) -> Option<&Entity<Markdown>> {
+    pub fn markdown(&self) -> Option<&Entity<MessageText>> {
         match self {
             ContentBlock::Empty => None,
             ContentBlock::Markdown { markdown } => Some(markdown),
@@ -2002,7 +2009,7 @@ impl Plan {
 
 #[derive(Debug)]
 pub struct PlanEntry {
-    pub content: Entity<Markdown>,
+    pub content: Entity<MessageText>,
     pub priority: acp::PlanEntryPriority,
     pub status: acp::PlanEntryStatus,
 }
@@ -2010,7 +2017,7 @@ pub struct PlanEntry {
 impl PlanEntry {
     pub fn from_acp(entry: acp::PlanEntry, cx: &mut App) -> Self {
         Self {
-            content: cx.new(|cx| Markdown::new(entry.content.into(), None, None, cx)),
+            content: cx.new(|_cx| MessageText::new(entry.content)),
             priority: entry.priority,
             status: entry.status,
         }
@@ -2136,7 +2143,7 @@ struct StreamingTextBuffer {
     /// The number of bytes to reveal per timer turn.
     bytes_to_reveal_per_tick: usize,
     /// The Markdown entity being streamed into.
-    target: Entity<Markdown>,
+    target: Entity<MessageText>,
     /// Timer task that periodically moves text from `pending` into `source`.
     _reveal_task: Task<()>,
 }
@@ -2855,7 +2862,7 @@ impl AcpThread {
         message_id: Option<&acp::MessageId>,
         is_thought: bool,
         indented: bool,
-    ) -> Option<Entity<Markdown>> {
+    ) -> Option<Entity<MessageText>> {
         let last_entry = self.entries.last_mut()?;
         if let AgentThreadEntry::AssistantMessage(AssistantMessage {
             chunks,
@@ -2896,7 +2903,7 @@ impl AcpThread {
     /// from thoughts to message text), flush the old buffer first.
     fn buffer_streaming_text(
         &mut self,
-        markdown: &Entity<Markdown>,
+        markdown: &Entity<MessageText>,
         text: String,
         cx: &mut Context<Self>,
     ) {
@@ -2936,7 +2943,7 @@ impl AcpThread {
             if !buffer.pending.is_empty() {
                 buffer
                     .target
-                    .update(cx, |markdown, cx| markdown.append(&buffer.pending, cx));
+                    .update(cx, |markdown, _| markdown.append(&buffer.pending));
             }
         }
     }
@@ -2968,8 +2975,8 @@ impl AcpThread {
                             .ceil_char_boundary(buffer.bytes_to_reveal_per_tick)
                             .min(pending_len);
 
-                        buffer.target.update(cx, |markdown: &mut Markdown, cx| {
-                            markdown.append(&buffer.pending[..byte_boundary], cx);
+                        buffer.target.update(cx, |markdown: &mut MessageText, _| {
+                            markdown.append(&buffer.pending[..byte_boundary]);
                             buffer.pending.drain(..byte_boundary);
                         });
 
@@ -3017,7 +3024,6 @@ impl AcpThread {
         update: ContextCompactionUpdate,
         cx: &mut Context<Self>,
     ) {
-        let language_registry = self.project.read(cx).languages().clone();
         let Some((ix, compaction)) =
             self.entries
                 .iter_mut()
@@ -3033,18 +3039,9 @@ impl AcpThread {
 
         if !update.summary_delta.is_empty() {
             if compaction.summary.is_none() {
-                compaction.summary = Some(cx.new(|cx| {
-                    Markdown::new(
-                        update.summary_delta.into(),
-                        Some(language_registry),
-                        None,
-                        cx,
-                    )
-                }));
+                compaction.summary = Some(cx.new(|_cx| MessageText::new(update.summary_delta.clone())));
             } else if let Some(summary) = compaction.summary.clone() {
-                summary.update(cx, |markdown, cx| {
-                    markdown.append(&update.summary_delta, cx)
-                });
+                summary.update(cx, |markdown, _| markdown.append(&update.summary_delta));
             }
         }
 
@@ -3114,7 +3111,7 @@ impl AcpThread {
                 // Tool call not found - create a failed tool call entry
                 let failed_tool_call = ToolCall {
                     id: update.id().clone(),
-                    label: cx.new(|cx| Markdown::new("Tool call not found".into(), None, None, cx)),
+                    label: cx.new(|_cx| MessageText::new("Tool call not found")),
                     kind: acp::ToolKind::Fetch,
                     content: vec![ToolCallContent::ContentBlock(ContentBlock::new(
                         "Tool call not found".into(),
@@ -3572,8 +3569,8 @@ impl AcpThread {
                 priority,
                 status,
             } = old;
-            content.update(cx, |old, cx| {
-                old.replace(new.content, cx);
+            content.update(cx, |old, _| {
+                old.replace(new.content);
             });
             *priority = new.priority;
             *status = new.status;
@@ -4707,44 +4704,17 @@ impl AcpThread {
 
 fn markdown_for_raw_output(
     raw_output: &serde_json::Value,
-    language_registry: &Arc<LanguageRegistry>,
+    _language_registry: &Arc<LanguageRegistry>,
     cx: &mut App,
-) -> Option<Entity<Markdown>> {
+) -> Option<Entity<MessageText>> {
     match raw_output {
         serde_json::Value::Null => None,
-        serde_json::Value::Bool(value) => Some(cx.new(|cx| {
-            Markdown::new(
-                value.to_string().into(),
-                Some(language_registry.clone()),
-                None,
-                cx,
-            )
-        })),
-        serde_json::Value::Number(value) => Some(cx.new(|cx| {
-            Markdown::new(
-                value.to_string().into(),
-                Some(language_registry.clone()),
-                None,
-                cx,
-            )
-        })),
-        serde_json::Value::String(value) => Some(cx.new(|cx| {
-            Markdown::new(
-                value.clone().into(),
-                Some(language_registry.clone()),
-                None,
-                cx,
-            )
-        })),
-        value => Some(cx.new(|cx| {
+        serde_json::Value::Bool(value) => Some(cx.new(|_cx| MessageText::new(value.to_string()))),
+        serde_json::Value::Number(value) => Some(cx.new(|_cx| MessageText::new(value.to_string()))),
+        serde_json::Value::String(value) => Some(cx.new(|_cx| MessageText::new(value.clone()))),
+        value => Some(cx.new(|_cx| {
             let pretty_json = to_string_pretty(value).unwrap_or_else(|_| value.to_string());
-
-            Markdown::new(
-                format!("```json\n{}\n```", pretty_json).into(),
-                Some(language_registry.clone()),
-                None,
-                cx,
-            )
+            MessageText::new(format!("```json\n{}\n```", pretty_json))
         })),
     }
 }
@@ -5569,7 +5539,7 @@ mod tests {
             // ToolCall serializes label, status, and each content block.
             let tool_call = ToolCall {
                 id: acp::ToolCallId::new("tool_1"),
-                label: cx.new(|cx| Markdown::new("ls".into(), None, None, cx)),
+                label: cx.new(|_cx| MessageText::new("ls")),
                 kind: acp::ToolKind::Execute,
                 content: vec![ToolCallContent::ContentBlock(text_block("output", cx))],
                 status: ToolCallStatus::Completed,
