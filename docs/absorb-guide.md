@@ -61,9 +61,9 @@ State as of the `58148f5` absorb round.
   `Indicator`, `h_flex`, `v_flex`, plus the `prelude`.
 - `crates/icons`: 28 `IconName` variants, the exact set referenced by
   compiled code.
-- `crates/` also holds orphaned directories that are not members: the
-  full zed UI crates and the `telos-core`/`telos-protocol`/`telos` prototype
-  dirs. They are excluded from the build and are candidates for deletion.
+- `crates/` also holds orphaned directories that are not members, such
+  as the full zed UI crates. They are excluded from the build and are
+  candidates for deletion.
 
 The authoritative graph definition is `cargo tree -p telos`. When in
 doubt about whether a crate belongs, ask whether the binary can reach it.
