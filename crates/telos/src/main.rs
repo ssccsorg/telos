@@ -32,6 +32,7 @@ fn map_launch_env() {
         ("TELOS_WS_TLS", "ZED_HELIX_TLS"),
         ("TELOS_WS_SKIP_TLS_VERIFY", "ZED_HELIX_SKIP_TLS_VERIFY"),
         ("TELOS_STATELESS", "ZED_STATELESS"),
+        ("TELOS_SESSION_ID", "HELIX_SESSION_ID"),
         ("TELOS_TOOL_APPROVAL", "ZED_TOOL_APPROVAL"),
     ];
     for (contract_name, zed_name) in PAIRS {
