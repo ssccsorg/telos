@@ -7,8 +7,12 @@ headless server for actus. Every upstream zed upgrade that touches the agent
 core must be absorbed through a standard procedure. This guide is that
 procedure: it records the boundary, the current layout, the crate map, and
 the step-by-step absorb workflow. It is the skeleton and blueprint for the
-next zed update, so the absorb stays mechanical and the verification stays
+the next zed update, so the absorb stays mechanical and the verification stays
 reproducible.
+
+Absorb is the standing process: telos never freezes against upstream, and
+every upstream zed change that touches the agent graph lands through this
+procedure.
 
 The monthly tracking process in `upstream-sync.md` handles small ongoing
 changes. This guide handles the version-level absorb: when a new zed release
@@ -40,6 +44,19 @@ one of them is a design decision, not an absorb.
 - License. The absorbed zed code keeps zed's license
   (`GPL-3.0-or-later`). Reports in `docs/sync/` record what changed and why,
   which is what keeps the derivation auditable.
+- Upstream absorb is mandatory and continuous. A telos change that
+diverges from upstream outside the recorded delta set is a design
+decision, not an absorb, and must be reviewed as one.
+- Launch environment boundary. actus speaks the `TELOS_*` launch env
+contract. Vendored crates keep their upstream env literals (`ZED_*`,
+`HELIX_*`); the single translation point is `map_launch_env` in
+`crates/telos/src/main.rs`. Never rename those literals inside vendored
+crates. If upstream changes them, absorb them as-is and adjust the
+mapping.
+- Vendored purity. After the replace step, vendored crates differ from
+upstream only by the recorded telos delta set (ui strip, headless
+providers, external sync wiring). A telos-only identifier found inside a
+vendored crate fails the delta-integrity gate.
 
 ## Current Layout
 
@@ -152,12 +169,19 @@ Run in order. A gate that fails blocks the absorb.
 3. `cargo build --profile telos-release -p telos --target-dir
    target/telos-release`, then copy the binary to
    `target/telos-release/tel`.
-4. The actus live suite: `cd ../actus && ./run.sh --scenarios`. It must pass
+4. Delta integrity. Vendored crates carry no telos-only identifiers:
+   run `grep -rn "TELOS_" crates --include='*.rs'` and confirm the hits
+   are confined to `crates/telos/` and the documented delta set. Re-verify
+   that the `map_launch_env` pair table matches the actus `TELOS_*` launch
+   contract.
+5. Deterministic conformance. Run the actus scenario suite in fake mode
+   (`TELOS_FAKE_BACKEND=1`, no API key); it must pass fully.
+6. The actus live suite: `cd ../actus && ./run.sh --scenarios`. It must pass
    all checks, including the file mention probe (S0) and the thread mention
    probe (S8) that seeds a thread and references it via its
    `zed:///agent/thread/{id}?name=...` URI. LSP diagnostics mentions are
    intentionally out of scope for the probes.
-5. `./run.sh --test` for the full actus integration surface when the
+7. `./run.sh --test` for the full actus integration surface when the
    scenario suite passes.
 
 ## Sync Reporting
