@@ -174,9 +174,11 @@ Run in order. A gate that fails blocks the absorb.
    are confined to `crates/telos/` and the documented delta set. Re-verify
    that the `map_launch_env` pair table matches the actus `TELOS_*` launch
    contract.
-5. Deterministic conformance. Run the actus scenario suite in fake mode
-   (`TELOS_FAKE_BACKEND=1`, no API key); it must pass fully.
-6. The actus live suite: `cd ../actus && ./run.sh --scenarios`. It must pass
+5. Deterministic conformance. Run `cd ../actus && ./run.sh
+   --scenarios-fake`. The fake backend answers every prompt, no API key
+   is used, and the tier must pass fully.
+6. Live suite, opt-in only because it consumes LLM tokens: `cd ../actus
+   && ./run.sh --scenarios-llm`. It must pass
    all checks, including the file mention probe (S0) and the thread mention
    probe (S8) that seeds a thread and references it via its
    `zed:///agent/thread/{id}?name=...` URI. LSP diagnostics mentions are
