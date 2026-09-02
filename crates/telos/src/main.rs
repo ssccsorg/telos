@@ -20,7 +20,29 @@ use project::{project_settings::ProjectSettings, Project};
 use settings::Settings as _;
 use watch;
 
+/// Actus drives telos through a launch contract of `TELOS_*` environment
+/// variables. The zed layer below reads its own `ZED_*` names, so the
+/// contract names are translated here, before any module initializes.
+fn map_launch_env() {
+    const PAIRS: &[(&str, &str)] = &[
+        ("TELOS_EXTERNAL_SYNC_ENABLED", "ZED_EXTERNAL_SYNC_ENABLED"),
+        ("TELOS_WEBSOCKET_SYNC_ENABLED", "ZED_WEBSOCKET_SYNC_ENABLED"),
+        ("TELOS_WS_URL", "ZED_HELIX_URL"),
+        ("TELOS_WS_TOKEN", "ZED_HELIX_TOKEN"),
+        ("TELOS_WS_TLS", "ZED_HELIX_TLS"),
+        ("TELOS_WS_SKIP_TLS_VERIFY", "ZED_HELIX_SKIP_TLS_VERIFY"),
+        ("TELOS_STATELESS", "ZED_STATELESS"),
+        ("TELOS_TOOL_APPROVAL", "ZED_TOOL_APPROVAL"),
+    ];
+    for (contract_name, zed_name) in PAIRS {
+        if let Ok(value) = std::env::var(contract_name) {
+            std::env::set_var(zed_name, value);
+        }
+    }
+}
+
 fn main() {
+    map_launch_env();
     // The shell-env capture invokes this binary with `--printenv` to dump
     // the login-shell environment. Handle it before any app initialization:
     // otherwise the child runs as a second headless agent, connects to the

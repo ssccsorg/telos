@@ -97,7 +97,8 @@ doubt about whether a crate belongs, ask whether the binary can reach it.
    buckets in `upstream-sync.md`.
 3. Replace the vendored crates. Copy the changed upstream crates over the
    telos copies, then restore the telos-specific edits that the copies
-   overwrote. Known telos deltas to re-apply: the headless entry in
+   overwrote. Known telos deltas to re-apply: the `TELOS_*` to `ZED_*`
+   launch-env mapping in `crates/telos/src/main.rs`, the entry in
    `telos`, the `external_websocket_sync` wiring, the ui-stripped
    `markdown` (mermaid tab buttons are plain gpui elements), and the
    `language_models` headless providers whose `settings_view` returns `None`.
@@ -131,8 +132,8 @@ it wholesale. Re-check these after every absorb:
   feature flags, trusted worktrees, HTTP client, client, language registry,
   node runtime, agent, agent servers, and the websocket sync.
 - The release profile is `telos-release` (`debug = false`, `strip =
-  "symbols"`). The binary lands at `target/telos-release/telos`;
-  actus's `run.sh` expects exactly that path.
+  "symbols"`). The binary lands at `target/telos-release/tel`; actus
+  expects exactly that path via `TELOS_BIN`.
 - The `--printenv` short-circuit stays first in `main`, before any app
   initialization.
 
@@ -150,7 +151,7 @@ Run in order. A gate that fails blocks the absorb.
    `zed:///agent/thread/{id}?name=...`.
 3. `cargo build --profile telos-release -p telos --target-dir
    target/telos-release`, then copy the binary to
-   `target/telos-release/telos`.
+   `target/telos-release/tel`.
 4. The actus live suite: `cd ../actus && ./run.sh --scenarios`. It must pass
    all checks, including the file mention probe (S0) and the thread mention
    probe (S8) that seeds a thread and references it via its

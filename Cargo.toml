@@ -831,7 +831,7 @@ nonminimal_bool = "allow"
 [workspace.metadata.dylint]
 libraries = [{ path = "tooling/lints" }]
 
-# Telos headless agent profile: drop debuginfo and symbols for a smaller
+# Telos release profile: drop debuginfo and symbols for a smaller
 # binary. Inherits the upstream release settings (thin LTO, codegen 1).
 [profile.telos-release]
 inherits = "release"

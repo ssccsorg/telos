@@ -36,20 +36,20 @@ this binary attached either way.
 
 - `crates/telos-protocol`: wire types for the actus contract
 - `crates/telos-core`: self-contained agent core (LLM backend, tools, loop)
-- `crates/telos`: the headless binary over the core
+- `crates/telos`: the `tel` binary over the core
 - `docs/upstream-sync.md`: upstream knowledge synchronization process
 - `index.qmd`: project documentation at the SSCCS index level
 
 ## Run
 
-Build the minimal headless agent and attach it to actus:
+Build telos and attach it to actus:
 
 ```sh
 cargo build --profile telos-release -p telos
-ZED_BIN=/path/to/this/repo/target/telos-release/telos LLM_API_KEY=dummy ./run.sh --test
+TELOS_BIN=/path/to/this/repo/target/telos-release/tel LLM_API_KEY=dummy ./run.sh --test
 ```
 
-The headless binary (`crates/telos`) wires the agent core directly
+The binary (`crates/telos`, built as `tel`) wires the agent core directly
 (gpui headless + project + native agent + external websocket sync) without
 the editor, workspace, agent_ui, or collab UI stack. It speaks the actus
 WebSocket contract: connect, agent_ready, chat, tools, completion.
