@@ -193,3 +193,71 @@ fn run_headless(cx: &mut App) -> Result<()> {
     log::info!("telos running");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::map_launch_env;
+
+    // Env mutation is process-global; serialize the two tests.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    const TELOS_KEYS: [&str; 7] = [
+        "TELOS_EXTERNAL_SYNC_ENABLED",
+        "TELOS_WEBSOCKET_SYNC_ENABLED",
+        "TELOS_WS_URL",
+        "TELOS_WS_TOKEN",
+        "TELOS_STATELESS",
+        "TELOS_SESSION_ID",
+        "TELOS_TOOL_APPROVAL",
+    ];
+    const MAPPED_KEYS: [&str; 7] = [
+        "ZED_EXTERNAL_SYNC_ENABLED",
+        "ZED_WEBSOCKET_SYNC_ENABLED",
+        "ZED_HELIX_URL",
+        "ZED_HELIX_TOKEN",
+        "ZED_STATELESS",
+        "HELIX_SESSION_ID",
+        "ZED_TOOL_APPROVAL",
+    ];
+
+    fn clear_env() {
+        for key in TELOS_KEYS.iter().chain(MAPPED_KEYS.iter()) {
+            std::env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn maps_telos_launch_env_onto_vendored_names() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let values = ["true", "true", "127.0.0.1:8080", "test-token", "1", "ses_t", "always"];
+        for (key, value) in TELOS_KEYS.iter().zip(values.iter()) {
+            std::env::set_var(key, value);
+        }
+
+        map_launch_env();
+
+        for (mapped, value) in MAPPED_KEYS.iter().zip(values.iter()) {
+            assert_eq!(
+                std::env::var(mapped).ok().as_deref(),
+                Some(*value),
+                "mapped env {mapped}"
+            );
+        }
+        clear_env();
+    }
+
+    #[test]
+    fn does_not_map_absent_telos_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        map_launch_env();
+        for key in MAPPED_KEYS {
+            assert!(
+                std::env::var_os(key).is_none(),
+                "{key} must stay unset without a TELOS_* source"
+            );
+        }
+        clear_env();
+    }
+}
