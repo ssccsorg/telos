@@ -1,0 +1,55 @@
+name: Test telos (LLM-free)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Delta integrity gate
+        run: |
+          # telos-owned identifiers must not leak into vendored crates.
+          hits=$(grep -rn 'TELOS_' crates --include='*.rs' | grep -v '^crates/telos/' || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            exit 1
+          fi
+
+      - name: Check
+        run: cargo check -p telos
+
+      - name: Unit tests (telos and graph crates)
+        run: cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers --lib
+
+  e2e-fake:
+    # Deterministic end-to-end against the fake backend. Never touches a
+    # real LLM. Requires a PAT that can read the private actus repository.
+    if: ${{ secrets.TELOS_ACTUS_PAT != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: telos
+      - uses: actions/checkout@v6
+        with:
+          repository: ssccsorg/actus
+          token: ${{ secrets.TELOS_ACTUS_PAT }}
+          path: actus
+
+      - name: Build tel
+        run: cargo build --profile telos-release -p telos
+        working-directory: telos
+
+      - name: Deterministic conformance (fake backend, no LLM)
+        run: |
+          cd actus
+          TELOS_BIN="$GITHUB_WORKSPACE/telos/target/telos-release/tel" bash run.sh --scenarios-fake
