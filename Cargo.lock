@@ -10037,7 +10037,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "telos-headless"
+name = "telos"
 version = "0.1.0"
 dependencies = [
  "acp_thread",

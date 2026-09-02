@@ -45,11 +45,11 @@ this binary attached either way.
 Build the minimal headless agent and attach it to actus:
 
 ```sh
-cargo build --profile telos-release -p telos-headless
-ZED_BIN=/path/to/this/repo/target/telos-release/telos-headless LLM_API_KEY=dummy ./run.sh --test
+cargo build --profile telos-release -p telos
+ZED_BIN=/path/to/this/repo/target/telos-release/telos LLM_API_KEY=dummy ./run.sh --test
 ```
 
-The headless binary (`crates/telos-headless`) wires the agent core directly
+The headless binary (`crates/telos`) wires the agent core directly
 (gpui headless + project + native agent + external websocket sync) without
 the editor, workspace, agent_ui, or collab UI stack. It speaks the actus
 WebSocket contract: connect, agent_ready, chat, tools, completion.

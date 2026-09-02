@@ -92,7 +92,7 @@ members = [
     "crates/task",
     "crates/telemetry",
     "crates/telemetry_events",
-    "crates/telos-headless",
+    "crates/telos",
     "crates/terminal",
     "crates/text",
     "crates/theme",
@@ -113,7 +113,7 @@ members = [
     "tooling/perf",
 
 ]
-default-members = ["crates/telos-headless"]
+default-members = ["crates/telos"]
 
 [workspace.package]
 publish = false

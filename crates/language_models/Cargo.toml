@@ -13,7 +13,7 @@ path = "src/language_models.rs"
 
 [features]
 default = ["extension-support"]
-# Extension-hosted LLM providers (wasm extensions). telos-headless uses only
+# Extension-hosted LLM providers (wasm extensions). telos uses only
 # the built-in providers and disables this to drop the wasmtime/cranelift
 # chain from the binary.
 extension-support = ["dep:extension", "dep:extension_host"]

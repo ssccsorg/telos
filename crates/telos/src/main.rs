@@ -34,7 +34,7 @@ fn main() {
     let app = Application::with_platform(gpui_platform::current_platform(true));
     app.run(move |cx| {
         if let Err(e) = run_headless(cx) {
-            log::error!("telos-headless: {e:#}");
+            log::error!("telos: {e:#}");
         }
     });
 }
@@ -167,6 +167,6 @@ fn run_headless(cx: &mut App) -> Result<()> {
         log::info!("websocket sync service initialized");
     }
 
-    log::info!("telos-headless running");
+    log::info!("telos running");
     Ok(())
 }

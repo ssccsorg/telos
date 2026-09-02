@@ -31,7 +31,7 @@ one of them is a design decision, not an absorb.
   mapping, thread persistence, and context injection; telos only knows
   `acp_thread_id`.
 - Headless only. No window, no editor, no workspace, no collab UI. The
-  binary is rooted at `crates/telos-headless`, whose dependency closure
+  binary is rooted at `crates/telos`, whose dependency closure
   defines the buildable graph.
 - No full UI crates in the graph. `crates/ui` is a stub that provides only
   the symbols the graph compiles against. UI crates (`editor`, `workspace`,
@@ -45,8 +45,8 @@ one of them is a design decision, not an absorb.
 
 State as of the `58148f5` absorb round.
 
-- 116 workspace members; `default-members = ["crates/telos-headless"]`.
-- `crates/telos-headless`: the only binary. Wires the agent core, gpui
+- 116 workspace members; `default-members = ["crates/telos"]`.
+- `crates/telos`: the only binary. Wires the agent core, gpui
   headless platform, project, the native agent server, and
   `external_websocket_sync`. Handles `--printenv` before app init so a shell
   environment probe never spawns a second agent.
@@ -65,7 +65,7 @@ State as of the `58148f5` absorb round.
   full zed UI crates and the `telos-core`/`telos-protocol`/`telos` prototype
   dirs. They are excluded from the build and are candidates for deletion.
 
-The authoritative graph definition is `cargo tree -p telos-headless`. When in
+The authoritative graph definition is `cargo tree -p telos`. When in
 doubt about whether a crate belongs, ask whether the binary can reach it.
 
 ## Crate Map
@@ -98,7 +98,7 @@ doubt about whether a crate belongs, ask whether the binary can reach it.
 3. Replace the vendored crates. Copy the changed upstream crates over the
    telos copies, then restore the telos-specific edits that the copies
    overwrote. Known telos deltas to re-apply: the headless entry in
-   `telos-headless`, the `external_websocket_sync` wiring, the ui-stripped
+   `telos`, the `external_websocket_sync` wiring, the ui-stripped
    `markdown` (mermaid tab buttons are plain gpui elements), and the
    `language_models` headless providers whose `settings_view` returns `None`.
 4. Adapt API drift. The previous absorb had to adjust for `acp` v1 schema
@@ -127,11 +127,11 @@ it wholesale. Re-check these after every absorb:
   `agent_servers` APIs. Its `request_thread_creation` path sends the user
   message as `ContentBlock::Text`; mention URIs are parsed downstream by
   `acp_thread::mention::MentionUri`.
-- `telos-headless` initializes the graph in order: release channel, settings,
+- `telos` initializes the graph in order: release channel, settings,
   feature flags, trusted worktrees, HTTP client, client, language registry,
   node runtime, agent, agent servers, and the websocket sync.
 - The release profile is `telos-release` (`debug = false`, `strip =
-  "symbols"`). The binary lands at `target/telos-release/telos-headless`;
+  "symbols"`). The binary lands at `target/telos-release/telos`;
   actus's `run.sh` expects exactly that path.
 - The `--printenv` short-circuit stays first in `main`, before any app
   initialization.
@@ -148,9 +148,9 @@ Run in order. A gate that fails blocks the absorb.
    `external_websocket_sync`. The `acp_thread` suite includes the mention
    parsing tests, including `test_parse_thread_uri` for
    `zed:///agent/thread/{id}?name=...`.
-3. `cargo build --profile telos-release -p telos-headless --target-dir
+3. `cargo build --profile telos-release -p telos --target-dir
    target/telos-release`, then copy the binary to
-   `target/telos-release/telos-headless`.
+   `target/telos-release/telos`.
 4. The actus live suite: `cd ../actus && ./run.sh --scenarios`. It must pass
    all checks, including the file mention probe (S0) and the thread mention
    probe (S8) that seeds a thread and references it via its

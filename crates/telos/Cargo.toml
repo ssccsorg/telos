@@ -1,11 +1,11 @@
 [package]
-name = "telos-headless"
+name = "telos"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 [[bin]]
-name = "telos-headless"
+name = "telos"
 path = "src/main.rs"
 
 [dependencies]
@@ -45,4 +45,3 @@ zlog_settings.workspace = true
 semver = "1"
 tokio.workspace = true
 watch.workspace = true
-
