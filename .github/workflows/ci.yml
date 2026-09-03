@@ -2,9 +2,15 @@ name: Test telos (LLM-free)
 
 on:
   push:
-    branches: ["main"]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,11 +30,11 @@ jobs:
             exit 1
           fi
 
-      - name: Check
-        run: cargo check -p telos
+      - name: Check workspace
+        run: cargo check --workspace
 
-      - name: Unit tests (telos and graph crates)
-        run: cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers --lib
+      - name: Test graph crates (no LLM)
+        run: cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers -p language_models -p markdown -p ui -p icons --lib
 
   e2e-fake:
     # Deterministic end-to-end against the fake backend. Never touches a
