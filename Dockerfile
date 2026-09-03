@@ -25,14 +25,18 @@ RUN apt-get update && apt-get install -y \
         | sh -s -- -y --profile minimal --default-toolchain 1.97.1
 
 ENV PATH="/root/.cargo/bin:${PATH}"
+ENV CARGO_INCREMENTAL=0
 WORKDIR /workspace
 
 COPY . .
 
 # The LLM-free gate: full workspace check plus the graph-crate unit tests.
+# One RUN keeps the multi-GB debug target out of the image (and out of the
+# gha layer cache, whose 10GB cap the full debug tree would exceed).
 FROM env AS gate
-RUN cargo check --workspace
-RUN cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers -p language_models -p icons
+RUN cargo check --workspace \
+    && cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers -p language_models -p icons \
+    && rm -rf /workspace/target
 
 # The agent binary used by the deterministic conformance tier (e2e-fake).
 FROM env AS tel
