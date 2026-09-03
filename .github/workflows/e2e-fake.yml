@@ -1,0 +1,42 @@
+name: Telos fake E2E (manual)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: telos-e2e-fake
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-fake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the actus PAT
+        env:
+          ACTUS_PAT: ${{ secrets.TELOS_ACTUS_PAT }}
+        run: |
+          if [ -z "$ACTUS_PAT" ]; then
+            echo "TELOS_ACTUS_PAT is not set; add it to the repository secrets first"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          path: telos
+      - uses: actions/checkout@v6
+        with:
+          repository: ssccsorg/actus
+          token: ${{ secrets.TELOS_ACTUS_PAT }}
+          path: actus
+
+      - name: Build tel
+        run: cargo build --profile telos-release -p telos
+        working-directory: telos
+
+      - name: Deterministic conformance (fake backend, no LLM)
+        run: |
+          cd actus
+          TELOS_BIN="$GITHUB_WORKSPACE/telos/target/telos-release/tel" bash run.sh --scenarios-fake
