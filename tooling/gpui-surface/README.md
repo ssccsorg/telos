@@ -50,3 +50,40 @@ item manifest; each wave lands as one PR verified by the LLM-free gate.
    to a telos-owned crate, gpui re-exports during transition.
 5. Wave 5: rename the remaining crate (runtime primitives only) from
    `gpui` to a telos-owned name via a dependency alias.
+
+## UI cluster cut design (Wave 3)
+
+Boundary facts (measured 2026-09):
+
+- `gpui` itself does not depend on the platform crates. The windowing
+  backends enter the graph through `gpui_platform`, which compiles
+  `gpui_macos` on mac (unconditional) and `gpui_linux` on linux.
+  `current_platform(headless=true)` still compiles the full windowed
+  backend crate, so window/scene/elements/text/svg stay reachable in every
+  telos build.
+- Existing headless paths do not cover a runtime: `current_headless_renderer`
+  is a Metal-based text-shaping test helper on mac, not a runtime platform.
+
+Design: gate the UI cluster behind a gpui `ui` feature (default off) and
+stop compiling the windowed platform crates for telos.
+
+1. gpui: add `ui` feature; cfg-gate `window`, `scene`, `elements/`,
+   `styled`, `view`, `spring` (+`elements/animation`), `text_system`
+   (render side), `svg_renderer`, `style` layout half; gate their Cargo
+   deps (`resvg`/`usvg`, `image` codecs, `fontdb`, `taffy`).
+2. Platform gate: `gpui_platform` gains `ui` = ["gpui/ui",
+   "gpui_macos", "gpui_linux"]; the platform crate deps become optional.
+3. Headless runtime for telos: implement a minimal `Platform` (executor
+   only) in gpui_platform or gpui core, driven by gpui_tokio; window/menu
+   methods panic or no-op. Reference skeleton:
+   `crates/gpui/src/platform/test/platform.rs`. The `Platform` trait has
+   163 required fns; most can no-op, the load-bearing ones are
+   `background_executor`, `foreground_executor`, `run`, `quit`,
+   `now`/timers.
+4. telos switches from `current_platform(true)` to the headless platform.
+5. Verify ui=off: `cargo tree -p telos` shows no resvg/usvg/image/fontdb/
+   taffy; gate image drops `libfontconfig-dev`.
+
+Open question for the spike: how the foreground executor is driven without
+an OS event loop (`Platform::run` + `threaded_dispatcher` vs gpui_tokio
+driving). Resolve before step 1.
