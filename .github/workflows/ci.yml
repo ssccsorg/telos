@@ -14,20 +14,11 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install Linux system dependencies
-        run: |
-          # The vendored font stack links system fontconfig at build time.
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev
 
       - name: Delta integrity gate
         run: |
@@ -38,8 +29,13 @@ jobs:
             exit 1
           fi
 
-      - name: Check workspace
-        run: cargo check --workspace
+      - uses: docker/setup-buildx-action@v4
 
-      - name: Test graph crates (no LLM)
-        run: cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers -p language_models -p icons
+      - name: Build the gate image (workspace check + graph tests)
+        run: |
+          docker buildx build --load \
+            --target gate \
+            --cache-from type=gha,scope=shared-telos \
+            --cache-to type=gha,mode=min,scope=shared-telos \
+            -t telos:gate \
+            .

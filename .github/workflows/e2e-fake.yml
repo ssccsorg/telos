@@ -32,17 +32,22 @@ jobs:
           token: ${{ secrets.TELOS_ACTUS_PAT }}
           path: actus
 
-      - name: Install Linux system dependencies
-        run: |
-          # The vendored font stack links system fontconfig at build time.
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev
+      - uses: docker/setup-buildx-action@v4
 
-      - name: Build tel
-        run: cargo build --profile telos-release -p telos
-        working-directory: telos
+      - name: Build the tel image
+        run: |
+          docker buildx build --load \
+            --target tel \
+            --cache-from type=gha,scope=shared-telos \
+            --cache-to type=gha,mode=min,scope=shared-telos \
+            -t telos:tel \
+            telos
 
       - name: Deterministic conformance (fake backend, no LLM)
         run: |
-          cd actus
-          TELOS_BIN="$GITHUB_WORKSPACE/telos/target/telos-release/tel" bash run.sh --scenarios-fake
+          docker run --rm \
+            -e TELOS_BIN=/workspace/target/telos-release/tel \
+            -v "$GITHUB_WORKSPACE/actus:/workspace/actus" \
+            -w /workspace/actus \
+            telos:tel \
+            bash run.sh --scenarios-fake
