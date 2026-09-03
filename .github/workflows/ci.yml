@@ -45,8 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install cargo-about
-        run: cargo install cargo-about --locked --features cli
+      - name: Install cargo-about (pinned prebuilt binary)
+        run: |
+          curl -sSfL --retry 3 --proto '=https' --tlsv1.2 \
+            https://github.com/EmbarkStudios/cargo-about/releases/download/0.9.2/cargo-about-0.9.2-x86_64-unknown-linux-musl.tar.gz \
+            | tar xz --strip-components=1 -C /usr/local/bin
+          cargo-about --version
 
       - name: Generate the third-party license report
         run: script/licenses-check.sh
