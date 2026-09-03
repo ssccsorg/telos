@@ -25,6 +25,7 @@ jobs:
 
       - name: Delta integrity gate
         run: |
+          # telos-owned identifiers must not leak into vendored crates.
           hits=$(grep -rn 'TELOS_' crates --include='*.rs' | grep -v '^crates/telos/' || true)
           if [ -n "$hits" ]; then
             echo "$hits"
