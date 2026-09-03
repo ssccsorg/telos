@@ -7,8 +7,7 @@ the terms of the GNU General Public License as published by the Free
 Software Foundation, either version 3 of the License, or (at your option)
 any later version.
 
-The full license text is in the `LICENSE` file at the repository root
-(identical to `LICENSE-GPL`).
+The full license text is in the `LICENSE` file at the repository root.
 
 ## Apache-2.0 components
 
