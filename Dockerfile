@@ -30,12 +30,15 @@ WORKDIR /workspace
 
 COPY . .
 
-# The LLM-free gate: full workspace check plus the graph-crate unit tests.
+# The LLM-free gate: the full workspace must compile in telos (every synced
+# crate builds here), and unit tests cover only the telos-owned crate.
+# Synced crates keep their behavior suites upstream; the absorb procedure is
+# docs/absorb-guide.md.
 # One RUN keeps the multi-GB debug target out of the image (and out of the
 # gha layer cache, whose 10GB cap the full debug tree would exceed).
 FROM env AS gate
 RUN cargo check --workspace \
-    && cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers -p language_models -p icons \
+    && cargo test -p telos \
     && rm -rf /workspace/target
 
 # The agent binary used by the deterministic conformance tier (e2e-fake).
