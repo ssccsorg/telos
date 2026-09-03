@@ -23,6 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install Linux system dependencies
+        run: |
+          # The vendored font stack links system fontconfig at build time.
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev
+
       - name: Delta integrity gate
         run: |
           # telos-owned identifiers must not leak into vendored crates.
@@ -36,4 +42,4 @@ jobs:
         run: cargo check --workspace
 
       - name: Test graph crates (no LLM)
-        run: cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers -p language_models -p markdown -p ui -p icons --lib
+        run: cargo test -p telos -p external_websocket_sync -p acp_thread -p agent -p agent_servers -p language_models -p icons

@@ -32,6 +32,12 @@ jobs:
           token: ${{ secrets.TELOS_ACTUS_PAT }}
           path: actus
 
+      - name: Install Linux system dependencies
+        run: |
+          # The vendored font stack links system fontconfig at build time.
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev
+
       - name: Build tel
         run: cargo build --profile telos-release -p telos
         working-directory: telos
