@@ -56,7 +56,7 @@ known Telos location.
   `map_launch_env` translation in `crates/telos/src/main.rs` are
   invariants. A sync must keep the pair table matched to the actus launch
   contract and must never rename env literals inside vendored crates.
-  The version-level invariants live in `absorb-guide.md`.
+  The version-level invariants live in `VENDORING.md`.
 - Keep the mapping table current. If Telos diverges architecturally from zed,
   update the table as part of the same sync, otherwise the next sync loses
   precision.

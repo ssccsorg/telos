@@ -33,7 +33,7 @@ COPY . .
 # The LLM-free gate: the full workspace must compile in telos (every synced
 # crate builds here), and unit tests cover only the telos-owned crate.
 # Synced crates keep their behavior suites upstream; the absorb procedure is
-# docs/absorb-guide.md.
+# VENDORING.md.
 # One RUN keeps the multi-GB debug target out of the image (and out of the
 # gha layer cache, whose 10GB cap the full debug tree would exceed).
 FROM env AS gate

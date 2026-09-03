@@ -1,24 +1,50 @@
-# Zed Absorption Guide
+# Zed Vendoring
+
+Telos vendors the zed agent graph: `crates/` holds byte-identical copies of
+upstream zed crates plus a thin telos-owned layer. This file records the
+derivation (which zed commit the vendored tree matches), the invariants
+that survive every update, and the version-level absorb procedure.
 
 ## Purpose
 
 Telos is a zed-derived codebase that keeps only the agent graph and runs as a
 headless server for actus. Every upstream zed upgrade that touches the agent
-core must be absorbed through a standard procedure. This guide is that
-procedure: it records the boundary, the current layout, the crate map, and
-the step-by-step absorb workflow. It is the skeleton and blueprint for the
-the next zed update, so the absorb stays mechanical and the verification stays
-reproducible.
+core must be absorbed through a standard procedure. This file is that
+procedure: it records the derivation commit, the boundary, the current
+layout, the crate map, and the step-by-step absorb workflow. It is the
+skeleton and blueprint for the next zed update, so the absorb stays
+mechanical and the verification stays reproducible.
 
 Absorb is the standing process: telos never freezes against upstream, and
 every upstream zed change that touches the agent graph lands through this
 procedure.
 
-The monthly tracking process in `upstream-sync.md` handles small ongoing
-changes. This guide handles the version-level absorb: when a new zed release
-changes the agent core, the vendored crates are replaced, the headless layer
-is re-adapted, the UI surface is re-stripped, and the conformance suite
-decides acceptance.
+The monthly tracking process in `docs/upstream-sync.md` handles small
+ongoing changes. This file handles the version-level absorb: when a new zed
+release changes the agent core, the vendored crates are replaced, the
+headless layer is re-adapted, the UI surface is re-stripped, and the
+conformance suite decides acceptance.
+
+## Derivation
+
+The vendored crates under `crates/`, everything except the telos-owned
+`crates/telos` and the helix-ported `crates/external_websocket_sync`, are
+copied from upstream zed at one pinned commit:
+
+    zed-industries/zed @ e3adf43f37d7a2a9c165a78b255d293b0848d2d0
+    main, 2026-08-28, "Show last recently used commands on top of the
+    picker's list (#63388)"
+
+Absorbed into telos on 2026-08-29 (telos `0a506ee`). Byte-identical spot
+checks against the reference clone: `crates/text/src/text.rs`,
+`crates/sum_tree/src/sum_tree.rs`.
+
+The pin makes a zed update a scoped diff: `git diff e3adf43..<new> --
+crates/agent crates/acp_thread ...`. Upstream changes outside the telos
+graph need no telos work, and the diff shows that before any vendored copy
+is touched. Bump the pin at the end of every absorb (step 7) to the
+reference commit that was actually merged; a stale pin silently widens the
+next diff.
 
 ## Boundary and Invariants
 
@@ -103,14 +129,19 @@ doubt about whether a crate belongs, ask whether the binary can reach it.
 
 ## Absorb Workflow
 
-1. Prepare the upstream reference. Keep a zed clone at a known commit. The
-   absorb targets the agent core paths: `crates/agent`, `crates/acp_thread`,
+1. Prepare the upstream reference. Use the pinned zed clone from the
+   Derivation section and fetch it to the candidate commit. The absorb
+   targets the agent core paths: `crates/agent`, `crates/acp_thread`,
    `crates/agent_servers`, `crates/language_model*`, `crates/project`,
    `crates/context_server`, `crates/acp_tools`, `crates/fs`, `crates/git`,
    `crates/text`, `crates/gpui`.
-2. Diff scope. Run the monthly sync diff first to know which of those paths
-   moved and how. Classify each change as absorb, watch, or ignore using the
-   buckets in `upstream-sync.md`.
+2. Diff scope. Diff from the pinned base: `git -C <zed clone> diff
+   e3adf43..<candidate> -- <target paths>`. Run the monthly sync diff
+   first to know which of those paths moved and how. Classify each change
+   as absorb, watch, or ignore using the buckets in
+   `docs/upstream-sync.md`. If nothing in the target paths moved, record a
+   no-op absorb and stop: an upstream change elsewhere never forces a
+   telos change by itself.
 3. Replace the vendored crates. Copy the changed upstream crates over the
    telos copies, then restore the telos-specific edits that the copies
    overwrote. Known telos deltas to re-apply: the `TELOS_*` to `ZED_*`
@@ -135,8 +166,9 @@ doubt about whether a crate belongs, ask whether the binary can reach it.
    suite is the acceptance decision.
 7. Commit and report. Commit the absorb on the working branch, then write
    `docs/sync/YYYY-MM.md` listing the replaced crates, the API adaptations,
-   the strip actions, and the watch items. Keep the crate map table current
-   in the same commit.
+   the strip actions, and the watch items. Bump the Derivation pin to the
+   reference commit that was merged and keep the crate map table current in
+   the same commit.
 
 ## Headless Adaptation
 
