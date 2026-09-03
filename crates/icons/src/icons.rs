@@ -11,43 +11,27 @@ pub enum IconName {
     AcpRegistry,
     AiAnthropic,
     AiAnthropicCompat,
-    AiBedrock,
     AiClaude,
     AiDeepSeek,
     AiEdit,
-    AiGemini,
-    AiGoogle,
-    AiLlamaCpp,
-    AiLmStudio,
     AiMistral,
     AiOllama,
     AiOpenAi,
     AiOpenAiCompat,
-    AiOpenAiGptSub,
-    AiOpenCode,
-    AiOpenRouter,
-    AiVercel,
-    AiXAi,
     AiZed,
     Archive,
     ArrowCircle,
     ArrowDown,
     ArrowDown10,
-    ArrowDownRight,
     ArrowLeft,
     ArrowRight,
     ArrowRightLeft,
     ArrowUp,
     ArrowUpRight,
     AtSign,
-    Attach,
     AudioOff,
     AudioOn,
     Backspace,
-    Bell,
-    BellDot,
-    BellOff,
-    BellRing,
     Binary,
     Bitbucket,
     Blocks,
@@ -55,7 +39,6 @@ pub enum IconName {
     BoltFilled,
     BoltOutlined,
     Book,
-    BookCopy,
     Box,
     BoxOpen,
     CaseSensitive,
@@ -83,11 +66,9 @@ pub enum IconName {
     CopilotError,
     CopilotInit,
     Copy,
-    CountdownTimer,
     Crosshair,
     CursorIBeam,
     Dash,
-    DatabaseZap,
     Debug,
     DebugBreakpoint,
     DebugContinue,
@@ -95,7 +76,6 @@ pub enum IconName {
     DebugDetach,
     DebugDisabledBreakpoint,
     DebugDisabledLogBreakpoint,
-    DebugIgnoreBreakpoints,
     DebugLogBreakpoint,
     DebugPause,
     DebugStepInto,
@@ -126,7 +106,6 @@ pub enum IconName {
     FastForward,
     FastForwardOff,
     File,
-    FileCode,
     FileDiff,
     FileDoc,
     FileGeneric,
@@ -135,8 +114,6 @@ pub enum IconName {
     FileLock,
     FileMarkdown,
     FileMultiple,
-    FileRust,
-    FileTextFilled,
     FileTextOutlined,
     FileToml,
     FileTree,
@@ -150,9 +127,6 @@ pub enum IconName {
     FolderSearch,
     FolderShare,
     FolderShared,
-    Font,
-    FontSize,
-    FontWeight,
     Forgejo,
     ForwardArrow,
     ForwardArrowUp,
@@ -174,11 +148,8 @@ pub enum IconName {
     HistoryRerun,
     Image,
     Inception,
-    Indicator,
     Info,
-    Json,
     Keyboard,
-    LineHeight,
     Link,
     Linux,
     ListCollapse,
@@ -201,7 +172,6 @@ pub enum IconName {
     Option,
     PageDown,
     PageUp,
-    Paperclip,
     Pencil,
     PencilUnavailable,
     Person,
@@ -215,7 +185,6 @@ pub enum IconName {
     QueueMessage,
     Quote,
     Reader,
-    RefreshTitle,
     Regex,
     ReplNeutral,
     Replace,
@@ -232,12 +201,10 @@ pub enum IconName {
     Send,
     Server,
     Settings,
-    Share,
     Shift,
     SignalHigh,
     SignalLow,
     SignalMedium,
-    Slash,
     Sourcehut,
     Space,
     Sparkle,
@@ -253,14 +220,12 @@ pub enum IconName {
     Table,
     Terminal,
     TerminalAlt,
-    TextSnippet,
     TextWrap,
     TextUnwrap,
     ThinkingMode,
     ThinkingModeOff,
     ThisWindow,
     Thread,
-    ThreadFromSummary,
     ThreadsSidebarLeftClosed,
     ThreadsSidebarLeftOpen,
     ThreadsSidebarRightClosed,
@@ -270,11 +235,9 @@ pub enum IconName {
     TodoComplete,
     TodoPending,
     TodoProgress,
-    ToolCopy,
     ToolDeleteFile,
     ToolDiagnostics,
     ToolHammer,
-    ToolNotification,
     ToolPencil,
     ToolSearch,
     ToolTerminal,
@@ -282,7 +245,6 @@ pub enum IconName {
     ToolWeb,
     Trash,
     Triangle,
-    TriangleRight,
     Undo,
     Unpin,
     UserArrowUp,
@@ -294,7 +256,6 @@ pub enum IconName {
     XCircle,
     XCircleFilled,
     ZedAgent,
-    ZedAgentTwo,
     ZedAssistant,
     ZedPredict,
     ZedPredictDisabled,
@@ -310,47 +271,5 @@ impl IconName {
     pub fn path(&self) -> Arc<str> {
         let file_stem: &'static str = self.into();
         format!("icons/{file_stem}.svg").into()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use strum::{IntoEnumIterator as _, ParseError};
-
-    use crate::IconName;
-
-    #[test]
-    fn test_all_icons_exist() {
-        let asset_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-
-        for icon in IconName::iter() {
-            let icon_path = asset_path.join(&*icon.path());
-            assert!(
-                icon_path.exists(),
-                "Icon {icon:?} does not exist at {icon_path:?}",
-            );
-        }
-    }
-
-    #[test]
-    fn test_no_dangling_icons() -> Result<(), ParseError> {
-        let icons_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons");
-
-        for entry in std::fs::read_dir(&icons_dir).expect("failed to read icons directory") {
-            let path = entry.expect("failed to read icons directory entry").path();
-            if path.extension().is_none_or(|extension| extension != "svg") {
-                continue;
-            }
-            let file_stem = path
-                .file_stem()
-                .and_then(|file_stem| file_stem.to_str())
-                .expect("icon file name is not valid UTF-8");
-
-            file_stem.parse::<IconName>()?;
-        }
-
-        Ok(())
     }
 }

@@ -71,7 +71,7 @@ telemetry.workspace = true
 tempfile.workspace = true
 text.workspace = true
 thiserror.workspace = true
-ui.workspace = true
+icons.workspace = true
 url.workspace = true
 util.workspace = true
 uuid.workspace = true
@@ -94,7 +94,6 @@ clock = { workspace = true, "features" = ["test-support"] }
 context_server = { workspace = true, "features" = ["test-support"] }
 ctor.workspace = true
 db = { workspace = true, "features" = ["test-support"] }
-editor = { workspace = true, "features" = ["test-support"] }
 env_logger.workspace = true
 eval_utils.workspace = true
 fs = { workspace = true, "features" = ["test-support"] }

@@ -4,6 +4,7 @@ use agent_servers::{AgentServer, AgentServerDelegate};
 use anyhow::Result;
 use fs::Fs;
 use gpui::{App, Entity, Task};
+use icons::IconName;
 use project::{AgentId, Project};
 
 use crate::{NativeAgent, NativeAgentConnection, ThreadStore, templates::Templates};
@@ -25,8 +26,8 @@ impl AgentServer for NativeAgentServer {
         crate::ZED_AGENT_ID.clone()
     }
 
-    fn logo(&self) -> ui::IconName {
-        ui::IconName::ZedAgent
+    fn logo(&self) -> IconName {
+        IconName::ZedAgent
     }
 
     fn connect(

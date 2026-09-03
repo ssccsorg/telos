@@ -47,10 +47,7 @@ fn test_create_signature_help_markdown_string_1(cx: &mut TestAppContext) {
         )
     );
     assert_eq!(
-        signature
-            .documentation
-            .unwrap()
-            .update(cx, |documentation, _| documentation.source().to_string()),
+        signature.documentation.unwrap().to_string(),
         "This is a test documentation",
     )
 }
@@ -93,10 +90,7 @@ fn test_create_signature_help_markdown_string_2(cx: &mut TestAppContext) {
         )
     );
     assert_eq!(
-        signature
-            .documentation
-            .unwrap()
-            .update(cx, |documentation, _| documentation.source().to_string()),
+        signature.documentation.unwrap().to_string(),
         "This is a test documentation",
     )
 }
@@ -464,7 +458,7 @@ fn test_parameter_documentation(cx: &mut TestAppContext) {
             .documentation
             .as_ref()
             .unwrap()
-            .update(cx, |documentation, _| documentation.source().to_string()),
+            .to_string(),
         "The foo parameter",
     );
     assert_eq!(
@@ -472,7 +466,7 @@ fn test_parameter_documentation(cx: &mut TestAppContext) {
             .documentation
             .as_ref()
             .unwrap()
-            .update(cx, |documentation, _| documentation.source().to_string()),
+            .to_string(),
         "The bar parameter",
     );
 

@@ -2,16 +2,47 @@
 name = "telos"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
 publish = false
 
+[[bin]]
+name = "tel"
+path = "src/main.rs"
+
 [dependencies]
-telos-protocol = { path = "../telos-protocol" }
-telos-core = { path = "../telos-core" }
-tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.26"
-futures-util = "0.3"
-serde_json = "1"
-anyhow = "1.0.102"
-uuid = { version = "1", features = ["v4"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+agent.workspace = true
+acp_thread.workspace = true
+agent_servers.workspace = true
+agent_settings.workspace = true
+external_websocket_sync.workspace = true
+project.workspace = true
+fs.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+language_model.workspace = true
+language_models.workspace = true
+prompt_store.workspace = true
+settings.workspace = true
+release_channel.workspace = true
+feature_flags.workspace = true
+futures.workspace = true
+http_client.workspace = true
+zlog.workspace = true
+zed_env_vars.workspace = true
+client.workspace = true
+db.workspace = true
+paths.workspace = true
+theme.workspace = true
+util.workspace = true
+anyhow.workspace = true
+log.workspace = true
+serde_json.workspace = true
+collections.workspace = true
+parking_lot.workspace = true
+language.workspace = true
+node_runtime.workspace = true
+reqwest_client.workspace = true
+zlog_settings.workspace = true
+semver = "1"
+tokio.workspace = true
+watch.workspace = true

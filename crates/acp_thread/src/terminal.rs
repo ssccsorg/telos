@@ -1,3 +1,4 @@
+use crate::MessageText;
 use agent_client_protocol::schema::v1 as acp;
 use anyhow::Result;
 use collections::HashMap;
@@ -5,7 +6,6 @@ use futures::{FutureExt as _, future::Shared};
 use gpui::{App, AppContext, AsyncApp, Context, Entity, Task};
 use http_proxy::Allowlist;
 use language::LanguageRegistry;
-use markdown::Markdown;
 use project::Project;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -401,7 +401,7 @@ pub(crate) async fn prepare_sandbox_wrap(
 
 pub struct Terminal {
     id: acp::TerminalId,
-    command: Entity<Markdown>,
+    command: Entity<MessageText>,
     working_dir: Option<PathBuf>,
     terminal: Entity<terminal::Terminal>,
     started_at: Instant,
@@ -434,7 +434,7 @@ impl Terminal {
         working_dir: Option<PathBuf>,
         output_byte_limit: Option<usize>,
         terminal: Entity<terminal::Terminal>,
-        language_registry: Arc<LanguageRegistry>,
+        _language_registry: Arc<LanguageRegistry>,
         sandbox: Option<SandboxConfigHandle>,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -455,14 +455,7 @@ impl Terminal {
         Self {
             id,
             _sandbox: sandbox,
-            command: cx.new(|cx| {
-                Markdown::new(
-                    format!("```\n{}\n```", command_label).into(),
-                    Some(language_registry.clone()),
-                    None,
-                    cx,
-                )
-            }),
+            command: cx.new(|_cx| MessageText::new(format!("```\n{}\n```", command_label))),
             working_dir,
             terminal,
             started_at: Instant::now(),
@@ -578,13 +571,13 @@ impl Terminal {
         (content, original_content_len)
     }
 
-    pub fn command(&self) -> &Entity<Markdown> {
+    pub fn command(&self) -> &Entity<MessageText> {
         &self.command
     }
 
     pub fn update_command_label(&self, label: &str, cx: &mut App) {
-        self.command.update(cx, |command, cx| {
-            command.replace(format!("```\n{}\n```", label), cx);
+        self.command.update(cx, |command, _| {
+            command.replace(format!("```\n{}\n```", label));
         });
     }
 

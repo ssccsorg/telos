@@ -10,14 +10,13 @@ use action_log::ActionLog;
 use agent_client_protocol::schema::v1 as acp;
 use anyhow::Result;
 use futures::FutureExt as _;
-use gpui::{App, AsyncApp, Entity, Task, WeakEntity};
+use gpui::{App, AsyncApp, Entity, SharedString, Task, WeakEntity};
 use language::LanguageRegistry;
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use ui::SharedString;
 
 const DEFAULT_UI_TEXT: &str = "Editing file";
 

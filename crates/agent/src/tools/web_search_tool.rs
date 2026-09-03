@@ -5,13 +5,12 @@ use agent_client_protocol::schema::v1 as acp;
 use anyhow::Result;
 use cloud_llm_client::WebSearchResponse;
 use futures::FutureExt as _;
-use gpui::{App, Task};
+use gpui::{App, SharedString, Task};
 use language_model::{
     LanguageModelProviderId, LanguageModelToolResultContent, ZED_CLOUD_PROVIDER_ID,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use ui::prelude::*;
 use util::markdown::MarkdownInlineCode;
 use web_search::WebSearchRegistry;
 

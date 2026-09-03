@@ -10,7 +10,6 @@ format:
 #| context: local
 title_meta_items = {
     "html": [
-        {"title": "Code", "link": "https://github.com/ssccsorg/telos", "content": "GitHub", "icon": "bi bi-link"},
         {"title": "References", "link": "https://github.com/ssccsorg/actus", "content": "Actus", "icon": "bi bi-link"},
         {"title": "References", "link": "https://docs.ssccs.org/projects/syntagma/", "content": "synTagma", "icon": "bi bi-link"},
         {"title": "References", "link": "https://docs.ssccs.org/projects/nexus/", "content": "neXus", "icon": "bi bi-link"},
@@ -72,7 +71,7 @@ digraph SSCCSStack {
 ## Contract
 
 Telos keeps a wire contract 1:1 with actus. Actus launches telos as its
-agent binary; telos connects back over WebSocket, announces readiness, and
+agent binary (`tel`); telos connects back over WebSocket, announces readiness, and
 then serves commands and emits events. The contract is the only stable
 boundary: eight event types flow from telos to actus, three command types
 flow from actus to telos, and every consumer path in actus depends on
@@ -99,19 +98,36 @@ touching actus.
 
 ## Status
 
-Early bootstrap. The mock agent implements the contract end to end and the
-actus chat flow works with the telos binary attached. The conformance
-suite runs through the actus `run.sh` test path. The real execution core
-is the next step, with indexing integrated into the tagma coordinate space.
+The contract is implemented end to end and pinned by conformance suites.
+A deterministic fake backend exercises the actus flows without an LLM,
+and the live suite runs through the actus `run.sh` test path. The real
+agent core is attached: the `tel` binary wires the agent core and serves
+the actus contract directly. Telos is an independent project; the
+absorbed agent core sits beneath its own crate, and actus depends on
+telos only.
+
+Indexing into the tagma coordinate space and time teleport remain the
+next steps.
 
 ## Direction
 
-- Real execution core behind the fixed contract, replacing the mock.
-- Basic indexing integrated into tagma coordinates, so location resolution
-  is arithmetic over coordinates instead of filesystem descent.
+- Indexing integrated into tagma coordinates, so location resolution is
+  arithmetic over coordinates instead of filesystem descent.
 - Time teleport: nexus replay restores a previous execution state at fine
   granularity, coarser than a commit and cheaper than a checkout.
+- Wider system-effect coverage across files, processes, networks, and
+  MCP servers behind the fixed contract.
 - The layer stays general: any LLM, any environment, any domain.
+
+## License
+
+Telos is licensed under GPL-3.0-or-later, with Apache-2.0 components
+where a crate's own `Cargo.toml` marks them as such. The absorbed Zed
+derived core keeps upstream licensing (GPL-3.0-or-later with
+Apache-2.0 marked components). License texts live in `LICENSE`
+(GPL-3.0-or-later) and `LICENSE-APACHE`; `NOTICE.md` describes the notice
+system. Third-party dependencies are reported via cargo-about
+(`about.toml`).
 
 ---
 

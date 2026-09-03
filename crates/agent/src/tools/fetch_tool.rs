@@ -5,12 +5,11 @@ use std::{borrow::Cow, cell::RefCell};
 use agent_client_protocol::schema::v1 as acp;
 use anyhow::{Context as _, Result, bail};
 use futures::{AsyncReadExt as _, FutureExt as _};
-use gpui::{App, AppContext as _, Task};
+use gpui::{App, AppContext as _, SharedString, Task};
 use html_to_markdown::{TagHandler, convert_html_to_markdown, markdown};
 use http_client::{AsyncBody, HttpClientWithUrl};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use ui::SharedString;
 use util::markdown::{MarkdownEscaped, MarkdownInlineCode};
 
 use crate::sandboxing::{NetworkRequest, SandboxRequest};

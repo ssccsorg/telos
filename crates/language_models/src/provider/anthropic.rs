@@ -7,6 +7,7 @@ use credentials_provider::CredentialsProvider;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
 use gpui::{App, AppContext, AsyncApp, Context, Entity, SharedString, Task};
 use http_client::{CustomHeaders, HttpClient};
+use icons::IconName;
 use language_model::{
     ANTHROPIC_PROVIDER_ID, ANTHROPIC_PROVIDER_NAME, ApiKeyConfiguration, ApiKeyState,
     AuthenticateError, CompactionResult, EnvVar, FastModeConfirmation, IconOrSvg, LanguageModel,
@@ -17,7 +18,6 @@ use language_model::{
 };
 use settings::{Settings, SettingsStore};
 use std::sync::{Arc, LazyLock};
-use ui::IconName;
 
 use anthropic::completion::collect_compaction_result;
 pub use anthropic::completion::{AnthropicEventMapper, AnthropicPromptCacheMode, into_anthropic};

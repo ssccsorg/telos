@@ -1,6 +1,7 @@
 use agent_client_protocol::schema::v1 as acp;
 use anyhow::{Context as _, Result, bail};
-use file_icons::FileIcons;
+use gpui::{App, SharedString};
+use icons::IconName;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -8,7 +9,6 @@ use std::{
     ops::RangeInclusive,
     path::{Path, PathBuf},
 };
-use ui::{App, IconName, SharedString};
 use url::Url;
 use urlencoding::decode;
 use util::{
@@ -433,14 +433,11 @@ impl MentionUri {
         }
     }
 
-    pub fn icon_path(&self, cx: &mut App) -> SharedString {
+    pub fn icon_path(&self, _cx: &mut App) -> SharedString {
         match self {
-            MentionUri::File { abs_path } => {
-                FileIcons::get_icon(abs_path, cx).unwrap_or_else(|| IconName::File.path().into())
-            }
+            MentionUri::File { .. } => IconName::File.path().into(),
             MentionUri::PastedImage { .. } => IconName::Image.path().into(),
-            MentionUri::Directory { abs_path } => FileIcons::get_folder_icon(false, abs_path, cx)
-                .unwrap_or_else(|| IconName::Folder.path().into()),
+            MentionUri::Directory { .. } => IconName::Folder.path().into(),
             MentionUri::Symbol { .. } => IconName::Code.path().into(),
             MentionUri::Thread { .. } => IconName::Thread.path().into(),
             MentionUri::Rule { .. } => IconName::Reader.path().into(),

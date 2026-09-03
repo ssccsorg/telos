@@ -6,7 +6,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use collections::{HashMap, IndexMap};
 use futures::{FutureExt, future::Shared};
-use gpui::{BackgroundExecutor, Global, Task};
+use gpui::{App, BackgroundExecutor, Global, SharedString, Task};
 use indoc::indoc;
 use language_model::Speed;
 use parking_lot::Mutex;
@@ -17,7 +17,6 @@ use sqlez::{
     statement::Statement,
 };
 use std::{io::ErrorKind, path::PathBuf, sync::Arc};
-use ui::{App, SharedString};
 use util::path_list::PathList;
 use zed_env_vars::ZED_STATELESS;
 

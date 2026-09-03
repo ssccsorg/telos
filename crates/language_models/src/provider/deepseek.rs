@@ -20,7 +20,7 @@ use settings::{Settings, SettingsStore};
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 
-use ui::IconName;
+use icons::IconName;
 
 use language_model::util::{fix_streamed_json, parse_tool_arguments};
 

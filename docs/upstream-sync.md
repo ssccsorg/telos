@@ -49,6 +49,14 @@ known Telos location.
 - Absorb behavior and design intent, never code expression. The license
   boundary is the reason the reports record what changed, not how the code
   looks.
+- The monthly process is mandatory and standing. Skipping a cycle, or
+  freezing telos against upstream, requires a recorded decision in the
+  sync report.
+- Launch boundary. The `TELOS_*` launch env contract and the
+  `map_launch_env` translation in `crates/telos/src/main.rs` are
+  invariants. A sync must keep the pair table matched to the actus launch
+  contract and must never rename env literals inside vendored crates.
+  The version-level invariants live in `VENDORING.md`.
 - Keep the mapping table current. If Telos diverges architecturally from zed,
   update the table as part of the same sync, otherwise the next sync loses
   precision.

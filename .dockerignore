@@ -1,0 +1,9 @@
+# rust-toolchain.toml is excluded on purpose: the image installs the pinned
+# channel with --profile minimal, while the repo file lists dev-only
+# components (rustfmt, clippy, rust-analyzer, rust-src) and extra targets
+# (wasm, musl) that the CI gate does not need.
+.git
+.github
+target
+docs
+rust-toolchain.toml

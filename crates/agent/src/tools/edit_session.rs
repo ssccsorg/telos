@@ -10,7 +10,7 @@ use agent_client_protocol::schema::v1::{self as acp, ToolCallLocation, ToolCallU
 use anyhow::Result;
 use collections::HashSet;
 use futures::{FutureExt, channel::oneshot};
-use gpui::{App, AppContext, AsyncApp, Entity, Task, WeakEntity};
+use gpui::{App, AppContext, AsyncApp, Entity, SharedString, Task, WeakEntity};
 use language::language_settings::{self, FormatOnSave};
 use language::{Buffer, BufferEditSource, BufferEvent, LanguageRegistry};
 use language_model::LanguageModelToolResultContent;
@@ -26,7 +26,6 @@ use streaming_diff::{CharOperation, StreamingDiff};
 use streaming_fuzzy_matcher::{SearchMatch, SearchMatches, StreamingFuzzyMatcher};
 use streaming_parser::{EditEvent, StreamingParser, WriteEvent};
 use text::ToOffset;
-use ui::SharedString;
 use util::rel_path::RelPath;
 use util::{Deferred, ResultExt};
 

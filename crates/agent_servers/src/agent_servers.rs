@@ -52,7 +52,7 @@ impl AgentServerDelegate {
 }
 
 pub trait AgentServer: Send {
-    fn logo(&self) -> ui::IconName;
+    fn logo(&self) -> icons::IconName;
     fn agent_id(&self) -> AgentId;
     fn connect(
         &self,

@@ -2,35 +2,27 @@ use std::sync::Arc;
 
 use ::settings::{Settings, SettingsStore};
 use client::{Client, UserStore};
-use collections::{HashMap, HashSet};
+use collections::HashMap;
+#[cfg(feature = "extension-support")]
+use collections::HashSet;
 use credentials_provider::CredentialsProvider;
 use gpui::{App, Context, Entity};
 use language_model::{LanguageModelProviderId, LanguageModelRegistry};
 use provider::deepseek::DeepSeekLanguageModelProvider;
 
-pub mod extension;
 pub mod provider;
 mod settings;
 
+#[cfg(feature = "extension-support")]
+pub mod extension;
+
+#[cfg(feature = "extension-support")]
 pub use crate::extension::init_proxy as init_extension_proxy;
 
 use crate::provider::anthropic::AnthropicLanguageModelProvider;
 use crate::provider::anthropic_compatible::AnthropicCompatibleLanguageModelProvider;
-use crate::provider::bedrock::BedrockLanguageModelProvider;
-use crate::provider::cloud::CloudLanguageModelProvider;
-use crate::provider::copilot_chat::CopilotChatLanguageModelProvider;
-use crate::provider::google::GoogleLanguageModelProvider;
-use crate::provider::llama_cpp::LlamaCppLanguageModelProvider;
-use crate::provider::lmstudio::LmStudioLanguageModelProvider;
-pub use crate::provider::mistral::MistralLanguageModelProvider;
-use crate::provider::ollama::OllamaLanguageModelProvider;
 use crate::provider::open_ai::OpenAiLanguageModelProvider;
 use crate::provider::open_ai_compatible::OpenAiCompatibleLanguageModelProvider;
-use crate::provider::open_router::OpenRouterLanguageModelProvider;
-use crate::provider::openai_subscribed::OpenAiSubscribedProvider;
-use crate::provider::opencode::OpenCodeLanguageModelProvider;
-use crate::provider::vercel_ai_gateway::VercelAiGatewayLanguageModelProvider;
-use crate::provider::x_ai::XAiLanguageModelProvider;
 pub use crate::settings::*;
 
 pub fn init(user_store: Entity<UserStore>, client: Arc<Client>, cx: &mut App) {
@@ -47,6 +39,7 @@ pub fn init(user_store: Entity<UserStore>, client: Arc<Client>, cx: &mut App) {
     });
 
     // Subscribe to extension store events to track LLM extension installations
+    #[cfg(feature = "extension-support")]
     if let Some(extension_store) = extension_host::ExtensionStore::try_global(cx) {
         cx.subscribe(&extension_store, {
             let registry = registry.downgrade();
@@ -215,19 +208,13 @@ fn register_compatible_providers(
 
 fn register_language_model_providers(
     registry: &mut LanguageModelRegistry,
-    user_store: Entity<UserStore>,
+    _user_store: Entity<UserStore>,
     client: Arc<Client>,
     credentials_provider: Arc<dyn CredentialsProvider>,
     cx: &mut Context<LanguageModelRegistry>,
 ) {
-    registry.register_provider(
-        Arc::new(CloudLanguageModelProvider::new(
-            user_store,
-            client.clone(),
-            cx,
-        )),
-        cx,
-    );
+    // Telos builds for the actus integration: only the providers needed by
+    // the openai-compatible mechanism and the deepseek default are kept.
     registry.register_provider(
         Arc::new(AnthropicLanguageModelProvider::new(
             client.http_client(),
@@ -245,96 +232,7 @@ fn register_language_model_providers(
         cx,
     );
     registry.register_provider(
-        Arc::new(OllamaLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(LmStudioLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(LlamaCppLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
         Arc::new(DeepSeekLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(GoogleLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        MistralLanguageModelProvider::global(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        ),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(BedrockLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(OpenRouterLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(VercelAiGatewayLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(XAiLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(
-        Arc::new(OpenCodeLanguageModelProvider::new(
-            client.http_client(),
-            credentials_provider.clone(),
-            cx,
-        )),
-        cx,
-    );
-    registry.register_provider(Arc::new(CopilotChatLanguageModelProvider::new(cx)), cx);
-    registry.register_provider(
-        Arc::new(OpenAiSubscribedProvider::new(
             client.http_client(),
             credentials_provider,
             cx,
@@ -351,11 +249,11 @@ mod tests {
     use feature_flags::FeatureFlagAppExt as _;
     use gpui::{AppContext as _, AsyncApp, BorrowAppContext as _};
     use http_client::FakeHttpClient;
+    use icons::IconName;
     use language_model::IconOrSvg;
     use release_channel::AppVersion;
     use std::future::Future;
     use std::pin::Pin;
-    use ui::IconName;
 
     struct FakeCredentialsProvider;
 
