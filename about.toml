@@ -1,0 +1,22 @@
+# cargo-about license policy for the telos workspace.
+# Mirrors the Zed practice: the accepted set is the policy, and the
+# generated report is the third-party dependency notice for NOTICE.md.
+#
+# Dependencies whose licensing is unclear or needs an override are
+# clarified here by appending [[clarifications]] entries (name,
+# expression, and optionally license-file or path).
+
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "GPL-3.0-or-later",
+]
+
+clarifications = []

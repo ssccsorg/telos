@@ -39,3 +39,14 @@ jobs:
             --cache-to type=gha,mode=min,scope=shared-telos \
             -t telos:gate \
             .
+
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked
+
+      - name: Generate the third-party license report
+        run: script/licenses-check.sh

@@ -119,6 +119,16 @@ next steps.
   MCP servers behind the fixed contract.
 - The layer stays general: any LLM, any environment, any domain.
 
+## License
+
+Telos is licensed under GPL-3.0-or-later, with Apache-2.0 components
+where a crate's own `Cargo.toml` marks them as such. The absorbed Zed
+derived core keeps upstream licensing (GPL-3.0-or-later with
+Apache-2.0 marked components). License texts live in `LICENSE`,
+`LICENSE-GPL`, and `LICENSE-APACHE`; `NOTICE.md` describes the notice
+system. Third-party dependencies are reported via cargo-about
+(`about.toml`).
+
 ---
 
 *Telos is a project of the SSCCS Foundation.*
