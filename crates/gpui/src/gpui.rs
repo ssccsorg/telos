@@ -28,12 +28,10 @@ pub(crate) use platform_scheduler::PlatformScheduler;
 mod geometry;
 mod gestures;
 mod global;
-mod input;
 mod inspector;
 mod interactive;
 mod key_dispatch;
 mod keymap;
-mod path_builder;
 mod platform;
 pub mod prelude;
 /// Profiling utilities for task, frame, and thread performance tracking.
@@ -138,12 +136,10 @@ macro_rules! bench_main {
 pub use gpui_shared_string::*;
 pub use gpui_util::arc_cow::ArcCow;
 pub use http_client;
-pub use input::*;
 pub use inspector::*;
 pub use interactive::*;
 use key_dispatch::*;
 pub use keymap::*;
-pub use path_builder::*;
 pub use platform::*;
 pub use profiler::*;
 #[cfg(any(target_os = "windows", target_os = "linux", target_family = "wasm"))]
