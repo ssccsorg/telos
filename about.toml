@@ -8,15 +8,25 @@
 
 accepted = [
     "Apache-2.0",
+    # Bytecode Alliance runtime crates (wasmtime, cranelift, wiggle,
+    # winx, pulley, regalloc2, wast) declare Apache-2.0 WITH LLVM-exception.
+    "Apache-2.0 WITH LLVM-exception",
     "MIT",
     "ISC",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    # xxhash-rust is distributed under the Boost Software License.
+    "BSL-1.0",
+    # libbz2-rs-sys wraps bzip2, licensed under bzip2-1.0.6.
+    "bzip2-1.0.6",
     "CC0-1.0",
+    # webpki-roots and webpki-root-certs carry Mozilla's root store
+    # under the Community Data License Agreement (Permissive).
+    "CDLA-Permissive-2.0",
     "Zlib",
     "Unicode-3.0",
     "MPL-2.0",
+    # telos and the absorbed Zed core are GPL-3.0-or-later.
     "GPL-3.0-or-later",
 ]
 
-clarifications = []

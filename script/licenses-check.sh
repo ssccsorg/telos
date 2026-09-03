@@ -11,9 +11,9 @@
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-out="${TMPDIR:-/tmp}/telos-licenses-$(date +%s).html"
+out="${TMPDIR:-/tmp}/telos-licenses-$(date +%s).json"
 
-if cargo about generate -c "$repo_root/about.toml" >"$out"; then
+if cargo about generate --fail --format json -c "$repo_root/about.toml" >"$out"; then
     echo "license report generated at: $out"
 else
     status=$?
