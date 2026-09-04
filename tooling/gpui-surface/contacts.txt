@@ -1,4 +1,4 @@
-contact files: 26
+contact files: 25
 acp_thread/src/acp_thread.rs
 	ListOffset <- elements/list.rs
 agent/src/thread.rs
@@ -32,8 +32,6 @@ project/tests/integration/signature_help.rs
 	HighlightStyle <- style.rs
 prompt_store/src/prompts.rs
 	AssetSource <- assets.rs
-session/src/session.rs
-	WindowId <- window.rs
 settings/src/content_into_gpui.rs
 	FontFeatures <- text_system/font_features.rs
 	FontStyle <- text_system.rs
@@ -80,7 +78,6 @@ theme_settings/src/settings.rs
 	Font <- text_system.rs
 	FontFallbacks <- text_system/font_fallbacks.rs
 	FontStyle <- text_system.rs
-	Window <- window.rs
 theme_settings/src/theme_settings.rs
 	Font <- text_system.rs
 	HighlightStyle <- style.rs
