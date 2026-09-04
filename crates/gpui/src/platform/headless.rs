@@ -1,4 +1,5 @@
 //! Minimal headless platform over [`ThreadedDispatcher`].
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use super::*;
@@ -9,11 +10,11 @@ pub struct HeadlessPlatform {
     text_system: Arc<dyn PlatformTextSystem>, quit: AtomicBool,
 }
 impl HeadlessPlatform {
-    pub fn new() -> Arc<Self> {
+    pub fn new() -> Rc<Self> {
         let dispatcher = Arc::new(ThreadedDispatcher::new());
         let background = BackgroundExecutor::new(dispatcher.clone());
         let foreground = ForegroundExecutor::new(dispatcher.clone());
-        Arc::new(Self { text_system: Arc::new(HeadlessTextSystem), dispatcher, background, foreground, quit: AtomicBool::new(false) })
+        Rc::new(Self { text_system: Arc::new(HeadlessTextSystem), dispatcher, background, foreground, quit: AtomicBool::new(false) })
     }
     fn run_loop(&self, on_finish_launching: Box<dyn FnOnce()>) {
         on_finish_launching();

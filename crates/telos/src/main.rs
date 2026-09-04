@@ -54,7 +54,15 @@ fn main() {
         return;
     }
 
-    let app = Application::with_platform(gpui_platform::current_platform(true));
+    // Default to the threaded-dispatcher headless platform (issue #3: cut the
+    // windowed platform backends out of the agent graph). Set
+    // TELOS_PLATFORM_RUNTIME=1 to fall back to the windowed platform of the
+    // host OS while the headless runtime is being validated.
+    let app = if std::env::var_os("TELOS_PLATFORM_RUNTIME").is_some() {
+        Application::with_platform(gpui_platform::current_platform(true))
+    } else {
+        Application::with_platform(gpui::HeadlessPlatform::new())
+    };
     app.run(move |cx| {
         if let Err(e) = run_headless(cx) {
             log::error!("telos: {e:#}");
