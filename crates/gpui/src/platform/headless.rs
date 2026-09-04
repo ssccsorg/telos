@@ -73,8 +73,8 @@ impl Platform for HeadlessPlatform {
     fn write_credentials(&self, url: &str, username: &str, password: &[u8]) -> Task<Result<()>> { todo!("headless: write_credentials") }
     fn read_credentials(&self, url: &str) -> Task<Result<Option<(String, Vec<u8>)>>> { todo!("headless: read_credentials") }
     fn delete_credentials(&self, url: &str) -> Task<Result<()>> { todo!("headless: delete_credentials") }
-    fn keyboard_layout(&self) -> Box<dyn PlatformKeyboardLayout> { todo!("headless: keyboard_layout") }
-    fn keyboard_mapper(&self) -> Rc<dyn PlatformKeyboardMapper> { todo!("headless: keyboard_mapper") }
+    fn keyboard_layout(&self) -> Box<dyn PlatformKeyboardLayout> { Box::new(HeadlessKeyboardLayout) }
+    fn keyboard_mapper(&self) -> Rc<dyn PlatformKeyboardMapper> { Rc::new(DummyKeyboardMapper) }
     fn on_keyboard_layout_change(&self, callback: Box<dyn FnMut()>) {  }
 }
 pub struct HeadlessTextSystem;
@@ -90,4 +90,10 @@ impl PlatformTextSystem for HeadlessTextSystem {
     fn rasterize_glyph( &self, params: &RenderGlyphParams, raster_bounds: Bounds<DevicePixels>, ) -> Result<(Size<DevicePixels>, Vec<u8>)> { todo!("headless text system: rasterize_glyph") }
     fn layout_line(&self, text: &str, font_size: Pixels, runs: &[FontRun]) -> LineLayout { todo!("headless text system: layout_line") }
     fn recommended_rendering_mode(&self, _font_id: FontId, _font_size: Pixels) -> TextRenderingMode { todo!("headless text system: recommended_rendering_mode") }
+}
+
+struct HeadlessKeyboardLayout;
+impl PlatformKeyboardLayout for HeadlessKeyboardLayout {
+    fn id(&self) -> &str { "headless" }
+    fn name(&self) -> &str { "Headless" }
 }
