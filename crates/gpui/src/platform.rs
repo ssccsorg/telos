@@ -40,19 +40,26 @@ pub(crate) type PlatformScreenCaptureFrame = core_video::image_buffer::CVImageBu
 use crate::{
     Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
     DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Edges, ExternalDragPayload, Font,
-    FontId, FontMetrics, FontRun, ForegroundExecutor, GlyphId, GpuSpecs, Hsla, ImageSource, Keymap,
-    LineLayout, Pixels, PlatformGestures, PlatformInput, Point, Priority, RenderGlyphParams,
-    RenderImage, RenderImageParams, RenderSvgParams, Scene, ShapedGlyph, ShapedRun, SharedString,
-    Size, SvgRenderer, SystemWindowTab, Task, Window, WindowControlArea, hash, point, px, size,
+    FontId, FontMetrics, FontRun, ForegroundExecutor, GlyphId, GpuSpecs, Hsla, Keymap, LineLayout,
+    Pixels, PlatformGestures, PlatformInput, Point, Priority, RenderGlyphParams, RenderImageParams,
+    Scene, ShapedGlyph, ShapedRun, SharedString, Size, SystemWindowTab, Task, Window,
+    WindowControlArea, hash, point, px, size,
 };
+#[cfg(feature = "ui")]
+use crate::{ImageSource, RenderImage, RenderSvgParams, SvgRenderer};
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use anyhow::bail;
 use anyhow::{Context as _, Result};
 use async_task::Runnable;
 use futures::channel::oneshot;
-#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+#[cfg(all(
+    feature = "ui",
+    any(test, feature = "test-support", feature = "bench-support")
+))]
 use image::RgbaImage;
+#[cfg(feature = "ui")]
 use image::codecs::gif::GifDecoder;
+#[cfg(feature = "ui")]
 use image::{AnimationDecoder as _, DynamicImage, Frame};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use scheduler::Instant;
@@ -63,6 +70,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
+#[cfg(feature = "ui")]
 use std::io::Cursor;
 use std::ops;
 use std::time::Duration;
@@ -995,14 +1003,17 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     /// Renders the given scene to a texture and returns the pixel data as an RGBA image.
     /// This does not present the frame to screen - useful for visual testing where we want
     /// to capture what would be rendered without displaying it or requiring the window to be visible.
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(all(feature = "ui", any(test, feature = "test-support")))]
     fn render_to_image(&self, _scene: &Scene) -> Result<RgbaImage> {
         anyhow::bail!("render_to_image not implemented for this platform")
     }
 }
 
 /// A renderer for headless windows that can produce real rendered output.
-#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+#[cfg(all(
+    feature = "ui",
+    any(test, feature = "test-support", feature = "bench-support")
+))]
 pub trait PlatformHeadlessRenderer {
     /// Render a scene and return the result as an RGBA image.
     fn render_scene_to_image(
@@ -1287,6 +1298,7 @@ pub fn get_gamma_correction_ratios(gamma: f32) -> [f32; 4] {
 #[expect(missing_docs)]
 pub enum AtlasKey {
     Glyph(RenderGlyphParams),
+    #[cfg(feature = "ui")]
     Svg(RenderSvgParams),
     Image(RenderImageParams),
 }
@@ -1311,6 +1323,7 @@ impl AtlasKey {
                     AtlasTextureKind::Monochrome
                 }
             }
+            #[cfg(feature = "ui")]
             AtlasKey::Svg(_) => AtlasTextureKind::Monochrome,
             AtlasKey::Image(_) => AtlasTextureKind::Polychrome,
         }
@@ -1323,6 +1336,7 @@ impl From<RenderGlyphParams> for AtlasKey {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<RenderSvgParams> for AtlasKey {
     fn from(params: RenderSvgParams) -> Self {
         Self::Svg(params)
@@ -2018,6 +2032,7 @@ pub struct WindowOptions {
     pub window_decorations: Option<WindowDecorations>,
 
     /// Icon image (X11 only)
+    #[cfg(feature = "ui")]
     pub icon: Option<Arc<image::RgbaImage>>,
 
     /// Tab group name, allows opening the window as a native tab on macOS 10.12+. Windows with the same tabbing identifier will be grouped together.
@@ -2075,6 +2090,7 @@ pub struct WindowParams {
 
     /// An image to set as the window icon (x11 only)
     #[cfg_attr(feature = "wayland", allow(dead_code))]
+    #[cfg(feature = "ui")]
     pub icon: Option<Arc<image::RgbaImage>>,
 
     #[cfg_attr(feature = "wayland", allow(dead_code))]
@@ -2143,6 +2159,7 @@ impl Default for WindowOptions {
             is_minimizable: true,
             display_id: None,
             window_background: WindowBackgroundAppearance::default(),
+            #[cfg(feature = "ui")]
             icon: None,
             app_id: None,
             window_min_size: None,
@@ -2692,6 +2709,7 @@ pub struct Image {
     pub id: u64,
 }
 
+#[cfg(feature = "ui")]
 pub(crate) fn decode_static_image(
     bytes: &[u8],
     format: image::ImageFormat,
@@ -2702,6 +2720,7 @@ pub(crate) fn decode_static_image(
     decode_static_image_from_decoder(decoder)
 }
 
+#[cfg(feature = "ui")]
 pub(crate) fn decode_static_image_from_decoder(
     mut decoder: impl image::ImageDecoder,
 ) -> Result<SmallVec<[Frame; 1]>> {
@@ -2746,6 +2765,7 @@ impl Image {
     }
 
     /// Use the GPUI `use_asset` API to make this image renderable
+    #[cfg(feature = "ui")]
     pub fn use_render_image(
         self: Arc<Self>,
         window: &mut Window,
@@ -2757,6 +2777,7 @@ impl Image {
     }
 
     /// Use the GPUI `get_asset` API to make this image renderable
+    #[cfg(feature = "ui")]
     pub fn get_render_image(
         self: Arc<Self>,
         window: &mut Window,
@@ -2768,18 +2789,20 @@ impl Image {
     }
 
     /// Use the GPUI `remove_asset` API to drop this image, if possible.
+    #[cfg(feature = "ui")]
     pub fn remove_asset(self: Arc<Self>, cx: &mut App) {
         ImageSource::Image(self).remove_asset(cx);
     }
 
     /// Check whether this image is present in GPUI's asset cache (loading or
     /// loaded), without fetching it.
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(all(feature = "ui", any(test, feature = "test-support")))]
     pub fn is_asset_cached(self: &Arc<Self>, cx: &App) -> bool {
         ImageSource::Image(self.clone()).is_asset_cached(cx)
     }
 
     /// Convert the clipboard image to an `ImageData` object.
+    #[cfg(feature = "ui")]
     pub fn to_image_data(&self, svg_renderer: SvgRenderer) -> Result<Arc<RenderImage>> {
         let frames = match self.format {
             ImageFormat::Gif => {
@@ -2898,7 +2921,7 @@ impl From<String> for ClipboardString {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ui"))]
 mod image_tests {
     use super::*;
     use std::sync::Arc;
