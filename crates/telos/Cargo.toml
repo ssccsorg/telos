@@ -18,7 +18,6 @@ external_websocket_sync.workspace = true
 project.workspace = true
 fs.workspace = true
 gpui.workspace = true
-gpui_platform.workspace = true
 language_model.workspace = true
 language_models.workspace = true
 prompt_store.workspace = true
