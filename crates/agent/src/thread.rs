@@ -1308,7 +1308,7 @@ pub struct Thread {
     subagent_context: Option<SubagentContext>,
     /// The user's unsent prompt text, persisted so it can be restored when reloading the thread.
     draft_prompt: Option<Vec<acp::ContentBlock>>,
-    ui_scroll_position: Option<gpui::ListOffset>,
+    ui_scroll_position: Option<acp_thread::ListOffset>,
     /// Weak references to running subagent threads for cancellation propagation
     running_subagents: Vec<WeakEntity<Thread>>,
     inherits_parent_model_settings: bool,
@@ -1828,7 +1828,7 @@ impl Thread {
             prompt_capabilities_rx,
             subagent_context: db_thread.subagent_context,
             draft_prompt: db_thread.draft_prompt,
-            ui_scroll_position: db_thread.ui_scroll_position.map(|sp| gpui::ListOffset {
+            ui_scroll_position: db_thread.ui_scroll_position.map(|sp| acp_thread::ListOffset {
                 item_ix: sp.item_ix,
                 offset_in_item: gpui::px(sp.offset_in_item),
             }),
@@ -1984,11 +1984,11 @@ impl Thread {
         self.draft_prompt = prompt;
     }
 
-    pub fn ui_scroll_position(&self) -> Option<gpui::ListOffset> {
+    pub fn ui_scroll_position(&self) -> Option<acp_thread::ListOffset> {
         self.ui_scroll_position
     }
 
-    pub fn set_ui_scroll_position(&mut self, position: Option<gpui::ListOffset>) {
+    pub fn set_ui_scroll_position(&mut self, position: Option<acp_thread::ListOffset>) {
         self.ui_scroll_position = position;
     }
 
