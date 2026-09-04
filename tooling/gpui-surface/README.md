@@ -65,6 +65,16 @@ Measured contact by module:
 - text_system and style.rs rows are Stream 2 value types (Font*,
   HighlightStyle, TextStyle, ObjectFit) that stay as data; only the
   layout/render half of these modules is in the gate set.
+- terminal rows: `terminal/src/terminal.rs` cleared once its
+  UI-interaction layer moved behind `cfg(any(test, feature = "ui"))`.
+  `terminal/src/mappings/mouse.rs` remains listed because the scanner
+  counts source references; the module is compiled only under the same
+  gate, so it is absent from the headless graph.
+
+The scanner strips cfg(test) and cfg(any(test, ...)) blocks, so rows are
+source-level truth for compiled production code; rows inside modules that
+are themselves ui-gated (for example terminal mappings/mouse.rs) are not
+compiled in the headless graph.
 
 ## Cut waves
 

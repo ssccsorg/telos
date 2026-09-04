@@ -56,21 +56,30 @@ def reachable():
     return {line.strip() for line in sys.stdin if line.strip()}
 
 def strip_cfg_test(text):
+    # Naive cfg(test)/cfg(any(test, ...))/mod tests block removal by brace
+    # depth. A skipped unit must open a brace before it may close, so
+    # multi-line item signatures keep the whole item out of the scan.
     depth = 0
     skip = False
+    opened = False
     out = []
     for line in text.splitlines():
         if re.search(r"#\[cfg\(test\)\]|#\[cfg\(any\(test", line):
             skip = True
+            depth = 0
+            opened = False
             continue
         if skip:
             depth += line.count("{") - line.count("}")
-            if depth <= 0:
+            if depth > 0:
+                opened = True
+            if opened and depth <= 0:
                 skip = False
             continue
         if re.match(r"\s*mod tests\b", line):
             skip = True
             depth = 0
+            opened = False
             continue
         out.append(line)
     return "\n".join(out)

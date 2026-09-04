@@ -1,4 +1,4 @@
-contact files: 21
+contact files: 20
 language/src/buffer.rs
 	HighlightStyle <- style.rs
 language/src/buffer_tests.rs
@@ -34,14 +34,6 @@ terminal/src/mappings/mouse.rs
 	MouseButton <- interactive.rs
 	ScrollDelta <- interactive.rs
 	ScrollWheelEvent <- interactive.rs
-terminal/src/terminal.rs
-	MouseButton <- interactive.rs
-	MouseDownEvent <- interactive.rs
-	MouseMoveEvent <- interactive.rs
-	MouseUpEvent <- interactive.rs
-	ScrollWheelEvent <- interactive.rs
-	TouchPhase <- interactive.rs
-	Window <- window.rs
 terminal/src/terminal_settings.rs
 	FontFallbacks <- text_system/font_fallbacks.rs
 	FontFeatures <- text_system/font_features.rs
