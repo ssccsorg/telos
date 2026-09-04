@@ -1,8 +1,4 @@
-contact files: 24
-acp_thread/src/acp_thread.rs
-	ListOffset <- elements/list.rs
-agent/src/thread.rs
-	ListOffset <- elements/list.rs
+contact files: 22
 client/src/user.rs
 	SharedUri <- shared_uri.rs
 language/src/buffer.rs
