@@ -1,4 +1,4 @@
-contact files: 25
+contact files: 24
 acp_thread/src/acp_thread.rs
 	ListOffset <- elements/list.rs
 agent/src/thread.rs
@@ -16,14 +16,6 @@ language/src/outline.rs
 language_model/src/request.rs
 	ObjectFit <- style.rs
 	size <- assets.rs
-project/src/image_store.rs
-	Asset <- asset_cache.rs
-	AssetLogger <- asset_cache.rs
-	ImageCacheError <- elements/img.rs
-	ImageSource <- elements/img.rs
-	Img <- elements/img.rs
-	RenderImage <- assets.rs
-	Window <- window.rs
 project/src/lsp_command/signature_help.rs
 	FontWeight <- text_system.rs
 	HighlightStyle <- style.rs
