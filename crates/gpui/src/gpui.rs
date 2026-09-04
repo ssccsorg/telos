@@ -46,6 +46,7 @@ mod spring;
 mod style;
 mod styled;
 mod subscription;
+#[cfg(feature = "ui")]
 mod svg_renderer;
 mod tab_stop;
 mod taffy;
@@ -145,6 +146,7 @@ use std::{any::Any, future::Future};
 pub use style::*;
 pub use styled::*;
 pub use subscription::*;
+#[cfg(feature = "ui")]
 pub use svg_renderer::*;
 pub(crate) use tab_stop::*;
 use taffy::TaffyLayoutEngine;
