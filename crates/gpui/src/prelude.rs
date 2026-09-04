@@ -4,6 +4,7 @@
 
 pub use crate::{
     AppContext as _, BorrowAppContext, Context, Element, InteractiveElement, IntoElement,
-    ParentElement, Refineable, Render, RenderOnce, StatefulInteractiveElement, Styled, StyledImage,
-    TaskExt as _, VisualContext, util::FluentBuilder,
+    ParentElement, Refineable, Render, RenderOnce, StatefulInteractiveElement, Styled, TaskExt as _, VisualContext, util::FluentBuilder,
 };
+#[cfg(feature = "ui")]
+pub use crate::StyledImage;
