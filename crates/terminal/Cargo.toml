@@ -6,6 +6,11 @@ publish.workspace = true
 license = "GPL-3.0-or-later"
 
 [features]
+# The gpui UI-interaction layer (mouse, hover, hyperlink, window sync).
+# The headless graph never renders a terminal view, so this stays off and
+# the layer is compiled only under cfg(test) or when a UI consumer enables
+# the feature on a port.
+ui = []
 test-support = [
     "collections/test-support",
     "gpui/test-support",
