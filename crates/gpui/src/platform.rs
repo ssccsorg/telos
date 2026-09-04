@@ -13,6 +13,8 @@ pub mod popup;
 // loops; also used by tests and benchmarks.
 mod threaded_dispatcher;
 
+mod headless;
+
 #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
 mod test;
 
@@ -88,6 +90,10 @@ pub use test::{TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream}
 // Production primitive for headless run loops: a real-time, OS-free
 // dispatcher whose main thread parks between runnables.
 pub use threaded_dispatcher::ThreadedDispatcher;
+
+// Headless platform over [`ThreadedDispatcher`]; used by the telos agent
+// binary instead of the windowed platform backends.
+pub use headless::HeadlessPlatform;
 
 #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
 pub use visual_test::VisualTestPlatform;
