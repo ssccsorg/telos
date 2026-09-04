@@ -10,12 +10,10 @@ pub use language_model_core::*;
 use anyhow::Result;
 use futures::{FutureExt, SinkExt};
 use futures::{StreamExt, channel::mpsc, future::BoxFuture, stream::BoxStream};
-use gpui::{AnyView, App, AsyncApp, BackgroundExecutor, Task, Window};
+use gpui::{App, AsyncApp, BackgroundExecutor, Task};
 use icons::IconName;
 use parking_lot::Mutex;
 use std::sync::Arc;
-
-pub type CreateProviderSettingsView = Arc<dyn Fn(&mut Window, &mut App) -> AnyView + 'static>;
 
 pub use crate::api_key::{ApiKey, ApiKeyState};
 pub use crate::registry::*;
@@ -421,35 +419,6 @@ pub trait LanguageModelProvider: 'static {
 #[derive(Clone)]
 pub enum ProviderSettingsView {
     ApiKey(ApiKeyConfiguration),
-    Inline(InlineProviderSettings),
-    SubPage(SubPageProviderSettings),
-}
-
-#[derive(Clone)]
-pub struct InlineProviderSettings {
-    pub title: Option<SharedString>,
-    pub description: Option<InlineDescription>,
-    pub create_view: CreateProviderSettingsView,
-}
-
-#[derive(Clone)]
-pub struct SubPageProviderSettings {
-    pub description: Option<InlineDescription>,
-    pub create_view: CreateProviderSettingsView,
-}
-
-impl SubPageProviderSettings {
-    pub fn new(create_view: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
-        Self {
-            description: None,
-            create_view: Arc::new(create_view),
-        }
-    }
-
-    pub fn description(mut self, description: InlineDescription) -> Self {
-        self.description = Some(description);
-        self
-    }
 }
 
 impl ApiKeyConfiguration {
@@ -476,17 +445,6 @@ pub struct ApiKeyConfiguration {
     pub is_from_env_var: bool,
     pub env_var_name: SharedString,
     pub api_key_url: SharedString,
-}
-
-/// The subtitle rendered beneath a provider's name when its configuration is
-/// shown inline.
-#[derive(Clone)]
-pub enum InlineDescription {
-    /// A clickable "Where to find key" link pointing at the given URL, for
-    /// API-key based providers.
-    ApiKeyUrl(SharedString),
-    /// Plain descriptive text, e.g. explaining a sign-in based provider.
-    Text(SharedString),
 }
 
 /// Provider-specific copy shown the first time a user enables fast mode.
