@@ -7,9 +7,13 @@ graph actually use in production (cfg(test) excluded)?
 
     cargo tree -p telos --target x86_64-unknown-linux-gnu --prefix none \
       | grep -oE '/crates/[a-z0-9_]+' | sed 's#.*/##' | sort -u \
-      | python3 tooling/gpui-surface/scan.py > tooling/gpui-surface/manifest.txt
+      > /tmp/telos-reachable.txt
+    python3 tooling/gpui-surface/scan.py < /tmp/telos-reachable.txt \
+      > tooling/gpui-surface/manifest.txt
+    python3 tooling/gpui-surface/contacts.py < /tmp/telos-reachable.txt \
+      > tooling/gpui-surface/contacts.txt
 
-The manifest is committed; regenerate it after every dependency change.
+Both outputs are committed; regenerate them after every dependency change.
 
 ## Measured result (2026-09)
 
@@ -32,6 +36,36 @@ key_dispatch, gestures, input, tab_stop, path_builder, spring, arena,
 bounds_tree, debug_overlay, inspector, queue, shared_uri, asset_cache,
 action/keymap/register_action.
 
+## Wave 3 contact surface (measured 2026-09)
+
+`contacts.txt` records the consumer side of the Wave 3 gate set: for each
+reachable crate file, the gpui UI-cluster items it references and the gpui
+module that defines them. It answers, per UI-cluster module, which
+consumer sites keep it compiled. Contact removal happens at these
+consumer sites (the gpui contact surface), so the gpui-side change for a
+module is a whole-module gate instead of item-level surgery.
+
+Measured contact by module:
+
+- window.rs: feature_flags, language_model, project (image_store,
+  project), session (WindowId), terminal, theme_settings, zed_actions
+- view.rs: language_model, zed_actions
+- styled.rs: theme (Styled)
+- element.rs: settings/editable_setting_control (RenderOnce)
+- elements/list.rs: acp_thread, agent (ListOffset)
+- elements/text.rs: language/buffer (StyledText)
+- elements/img.rs: project/image_store (Img, ImageSource,
+  ImageCacheError)
+- assets.rs / asset_cache.rs: project/image_store, prompt_store, theme
+  (AssetSource, Asset, AssetLogger, RenderImage, size)
+- shared_uri.rs: client (SharedUri)
+- interactive.rs: terminal (input events, kept for the emulator input
+  path per the 2026-09-03 usage note)
+- keymap/ and action leftovers: settings/keymap_file, zed_actions
+- text_system and style.rs rows are Stream 2 value types (Font*,
+  HighlightStyle, TextStyle, ObjectFit) that stay as data; only the
+  layout/render half of these modules is in the gate set.
+
 ## Cut waves
 
 Wave membership is confirmed at execution time by compile errors plus the
@@ -46,6 +80,10 @@ item manifest; each wave lands as one PR verified by the LLM-free gate.
 3. Wave 3: rendering stack (svg_renderer, img, scene, elements, styled,
    text_system raster path, taffy) plus their Cargo deps (resvg/usvg,
    image codecs, fontdb), once platform crates no longer reference them.
+   Execution order is contact-driven: for each module in the gate set,
+   remove the consumer contacts in `contacts.txt` first (consumer-side
+   edits), then gate the whole module behind the `ui` feature. Progress
+   is tracked per commit on the wave branch.
 4. Wave 4: value-type extraction (Hsla/Rgba/HighlightStyle/font/geometry)
    to a telos-owned crate, gpui re-exports during transition.
 5. Wave 5: rename the remaining crate (runtime primitives only) from

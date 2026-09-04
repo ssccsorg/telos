@@ -62,6 +62,7 @@ AnyWeakEntity	2	app/entity_map.rs
 proptest	2	?
 NoAction	2	?
 WindowButtonLayout	2	platform.rs
+HeadlessPlatform	2	platform/headless.rs
 ScrollWheelEvent	2	interactive.rs
 FontFallbacks	2	text_system/font_fallbacks.rs
 ScrollDelta	2	interactive.rs

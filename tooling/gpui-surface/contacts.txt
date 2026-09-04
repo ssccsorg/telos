@@ -1,0 +1,99 @@
+contact files: 31
+acp_thread/src/acp_thread.rs
+	ListOffset <- elements/list.rs
+agent/src/thread.rs
+	ListOffset <- elements/list.rs
+client/src/user.rs
+	SharedUri <- shared_uri.rs
+feature_flags/src/feature_flags.rs
+	Window <- window.rs
+language/src/buffer.rs
+	HighlightStyle <- style.rs
+	StyledText <- elements/text.rs
+	TextStyle <- style.rs
+language/src/buffer_tests.rs
+	HighlightStyle <- style.rs
+language/src/outline.rs
+	HighlightStyle <- style.rs
+language_model/src/language_model.rs
+	AnyView <- view.rs
+	Window <- window.rs
+language_model/src/request.rs
+	ObjectFit <- style.rs
+	size <- assets.rs
+project/src/image_store.rs
+	Asset <- asset_cache.rs
+	AssetLogger <- asset_cache.rs
+	ImageCacheError <- elements/img.rs
+	ImageSource <- elements/img.rs
+	Img <- elements/img.rs
+	RenderImage <- assets.rs
+	Window <- window.rs
+project/src/lsp_command/signature_help.rs
+	FontWeight <- text_system.rs
+	HighlightStyle <- style.rs
+project/src/project.rs
+	Window <- window.rs
+project/tests/integration/signature_help.rs
+	FontWeight <- text_system.rs
+	HighlightStyle <- style.rs
+prompt_store/src/prompts.rs
+	AssetSource <- assets.rs
+session/src/session.rs
+	WindowId <- window.rs
+settings/src/content_into_gpui.rs
+	FontFeatures <- text_system/font_features.rs
+	FontStyle <- text_system.rs
+	FontWeight <- text_system.rs
+settings/src/editable_setting_control.rs
+	RenderOnce <- element.rs
+settings/src/keymap_file.rs
+	KeyBinding <- keymap/binding.rs
+	KeyBindingContextPredicate <- keymap/context.rs
+	KeyBindingMetaIndex <- keymap/binding.rs
+settings_content/src/theme.rs
+	FontFeatures <- text_system/font_features.rs
+syntax_theme/src/syntax_theme.rs
+	FontStyle <- text_system.rs
+	FontWeight <- text_system.rs
+	HighlightStyle <- style.rs
+terminal/src/mappings/mouse.rs
+	MouseButton <- interactive.rs
+	ScrollDelta <- interactive.rs
+	ScrollWheelEvent <- interactive.rs
+terminal/src/terminal.rs
+	MouseButton <- interactive.rs
+	MouseDownEvent <- interactive.rs
+	MouseMoveEvent <- interactive.rs
+	MouseUpEvent <- interactive.rs
+	ScrollWheelEvent <- interactive.rs
+	TouchPhase <- interactive.rs
+	Window <- window.rs
+terminal/src/terminal_settings.rs
+	FontFallbacks <- text_system/font_fallbacks.rs
+	FontFeatures <- text_system/font_features.rs
+	FontWeight <- text_system.rs
+theme/src/fallback_themes.rs
+	FontStyle <- text_system.rs
+	FontWeight <- text_system.rs
+	HighlightStyle <- style.rs
+theme/src/registry.rs
+	AssetSource <- assets.rs
+theme/src/theme.rs
+	AssetSource <- assets.rs
+	Styled <- styled.rs
+theme/src/theme_settings_provider.rs
+	Font <- text_system.rs
+theme_settings/src/schema.rs
+	HighlightStyle <- style.rs
+theme_settings/src/settings.rs
+	Font <- text_system.rs
+	FontFallbacks <- text_system/font_fallbacks.rs
+	FontStyle <- text_system.rs
+	Window <- window.rs
+theme_settings/src/theme_settings.rs
+	Font <- text_system.rs
+	HighlightStyle <- style.rs
+zed_actions/src/lib.rs
+	AnyView <- view.rs
+	Window <- window.rs
