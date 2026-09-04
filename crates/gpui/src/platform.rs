@@ -9,7 +9,8 @@ pub mod layer_shell;
 /// Types for configuring parent-anchored popup windows such as menus, dropdowns and tooltips.
 pub mod popup;
 
-#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+// Real-time, OS-free dispatcher. Production primitive for headless run
+// loops; also used by tests and benchmarks.
 mod threaded_dispatcher;
 
 #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
@@ -84,7 +85,8 @@ pub(crate) use test::*;
 #[cfg(any(test, feature = "test-support"))]
 pub use test::{TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream};
 
-#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+// Production primitive for headless run loops: a real-time, OS-free
+// dispatcher whose main thread parks between runnables.
 pub use threaded_dispatcher::ThreadedDispatcher;
 
 #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]

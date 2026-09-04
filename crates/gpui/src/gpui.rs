@@ -36,14 +36,8 @@ mod platform;
 pub mod prelude;
 /// Profiling utilities for task, frame, and thread performance tracking.
 pub mod profiler;
-#[cfg(any(
-    test,
-    target_os = "windows",
-    target_os = "linux",
-    target_family = "wasm",
-    feature = "test-support",
-    feature = "bench-support"
-))]
+// Priority queue used by the always-compiled `threaded_dispatcher` (headless
+// run loops) and by platform dispatchers. Compiled on every platform.
 #[expect(missing_docs)]
 pub mod queue;
 mod scene;
