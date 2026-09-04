@@ -1,10 +1,10 @@
 //! Deterministic language model backend for contract tests.
 //!
-//! Activated with `TELOS_FAKE_BACKEND=1`. Every prompt is answered with a
+//! Activated with `TELOS_STUB_BACKEND=1`. Every prompt is answered with a
 //! fixed message, so the actus contract (thread lifecycle, mention format,
 //! reconnect, concurrency) can be verified without an LLM API key and
 //! without model variance. The response text is configurable through
-//! `TELOS_FAKE_RESPONSE` (defaults to "OK").
+//! `TELOS_STUB_RESPONSE` (defaults to "OK").
 
 use std::sync::Arc;
 
@@ -23,23 +23,23 @@ use language_model::{
     LanguageModelToolChoice, StopReason,
 };
 
-pub struct FakeBackendProvider {
+pub struct StubBackendProvider {
     id: LanguageModelProviderId,
     name: LanguageModelProviderName,
-    model: Arc<FakeBackendModel>,
+    model: Arc<StubBackendModel>,
 }
 
-impl Default for FakeBackendProvider {
+impl Default for StubBackendProvider {
     fn default() -> Self {
         Self {
-            id: LanguageModelProviderId::from("fake-backend".to_string()),
-            name: LanguageModelProviderName::from("Fake Backend".to_string()),
-            model: Arc::new(FakeBackendModel::default()),
+            id: LanguageModelProviderId::from("stub-backend".to_string()),
+            name: LanguageModelProviderName::from("Stub Backend".to_string()),
+            model: Arc::new(StubBackendModel::default()),
         }
     }
 }
 
-impl LanguageModelProviderState for FakeBackendProvider {
+impl LanguageModelProviderState for StubBackendProvider {
     type ObservableEntity = ();
 
     fn observable_entity(&self) -> Option<Entity<Self::ObservableEntity>> {
@@ -47,7 +47,7 @@ impl LanguageModelProviderState for FakeBackendProvider {
     }
 }
 
-impl LanguageModelProvider for FakeBackendProvider {
+impl LanguageModelProvider for StubBackendProvider {
     fn id(&self) -> LanguageModelProviderId {
         self.id.clone()
     }
@@ -81,21 +81,21 @@ impl LanguageModelProvider for FakeBackendProvider {
     }
 }
 
-pub struct FakeBackendModel {
+pub struct StubBackendModel {
     id: LanguageModelId,
     name: LanguageModelName,
 }
 
-impl Default for FakeBackendModel {
+impl Default for StubBackendModel {
     fn default() -> Self {
         Self {
-            id: LanguageModelId::from("fake-backend-model".to_string()),
-            name: LanguageModelName::from("Fake Backend Model".to_string()),
+            id: LanguageModelId::from("stub-backend-model".to_string()),
+            name: LanguageModelName::from("Stub Backend Model".to_string()),
         }
     }
 }
 
-impl LanguageModel for FakeBackendModel {
+impl LanguageModel for StubBackendModel {
     fn id(&self) -> LanguageModelId {
         self.id.clone()
     }
@@ -105,15 +105,15 @@ impl LanguageModel for FakeBackendModel {
     }
 
     fn provider_id(&self) -> LanguageModelProviderId {
-        LanguageModelProviderId::from("fake-backend".to_string())
+        LanguageModelProviderId::from("stub-backend".to_string())
     }
 
     fn provider_name(&self) -> LanguageModelProviderName {
-        LanguageModelProviderName::from("Fake Backend".to_string())
+        LanguageModelProviderName::from("Stub Backend".to_string())
     }
 
     fn telemetry_id(&self) -> String {
-        "fake-backend".to_string()
+        "stub-backend".to_string()
     }
 
     fn supports_images(&self) -> bool {
@@ -143,11 +143,11 @@ impl LanguageModel for FakeBackendModel {
             LanguageModelCompletionError,
         >,
     > {
-        let response = std::env::var("TELOS_FAKE_RESPONSE").unwrap_or_else(|_| "OK".to_string());
+        let response = std::env::var("TELOS_STUB_RESPONSE").unwrap_or_else(|_| "OK".to_string());
         async move {
             let (tx, rx) = mpsc::unbounded();
             tx.unbounded_send(Ok(LanguageModelCompletionEvent::StartMessage {
-                message_id: "fake-message-1".into(),
+                message_id: "stub-message-1".into(),
             }))
             .ok();
             tx.unbounded_send(Ok(LanguageModelCompletionEvent::Text(response)))

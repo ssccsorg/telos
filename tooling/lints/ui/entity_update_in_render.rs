@@ -96,17 +96,17 @@ fn update_outside_render(entity: &Entity<Counter>, cx: &mut App) {
 }
 
 // .update() on a non-gpui type (unrelated method named "update")
-struct FakeEntity;
+struct StubEntity;
 
-impl FakeEntity {
+impl StubEntity {
     fn update(&self) {}
 }
 
-struct FakeView {
-    thing: FakeEntity,
+struct StubView {
+    thing: StubEntity,
 }
 
-impl Render for FakeView {
+impl Render for StubView {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.thing.update();
         ()

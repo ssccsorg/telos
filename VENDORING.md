@@ -219,11 +219,11 @@ Run in order. A gate that fails blocks the port.
 3. Telos-owned tests (CI, gate image). `cargo test -p telos`: the launch
    env mapping tests in `crates/telos/src/main.rs` plus any other unit
    tests in the crate.
-4. Release build (e2e-fake image). `cargo build --profile telos-release
+4. Release build (e2e-stub image). `cargo build --profile telos-release
    -p telos`; the binary lands at `target/telos-release/tel`, the path
    actus expects via `TELOS_BIN`.
-5. Deterministic conformance (manual e2e-fake workflow). Runs the built
-   `tel` against `cd ../actus && ./run.sh --scenarios-fake`. The fake
+5. Deterministic conformance (manual e2e-stub workflow). Runs the built
+   `tel` against `cd ../actus && ./run.sh --scenarios-stub`. The stub
    backend answers every prompt, no API key is used, and the tier must
    pass fully.
 6. Live suite, opt-in only because it consumes LLM tokens: `cd ../actus

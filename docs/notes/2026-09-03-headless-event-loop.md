@@ -65,7 +65,7 @@ Not changed: task ordering and cancellation semantics, which come from the
 1. Spike: prototype a telos runtime entry on `ThreadedDispatcher` in the
    style of `BenchAppContext` (a `Platform` whose window methods no-op or
    panic, foreground drained by a park-on-idle loop). Verify with
-   `cargo check -p telos` and the actus fake conformance tier.
+   `cargo check -p telos` and the actus stub conformance tier.
 2. If the spike holds, gate the UI cluster behind the gpui `ui` feature
    (default on) and switch telos to the headless runtime; windowed platform
    crates (`gpui_macos`, `gpui_linux`) then leave the telos graph.
