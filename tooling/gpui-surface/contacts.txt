@@ -1,10 +1,6 @@
-contact files: 22
-client/src/user.rs
-	SharedUri <- shared_uri.rs
+contact files: 21
 language/src/buffer.rs
 	HighlightStyle <- style.rs
-	StyledText <- elements/text.rs
-	TextStyle <- style.rs
 language/src/buffer_tests.rs
 	HighlightStyle <- style.rs
 language/src/outline.rs
