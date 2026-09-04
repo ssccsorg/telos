@@ -68,8 +68,16 @@ impl Platform for HeadlessPlatform {
     fn should_auto_hide_scrollbars(&self) -> bool { false }
     fn read_from_clipboard(&self) -> Option<ClipboardItem> { todo!("headless: read_from_clipboard") }
     fn write_to_clipboard(&self, item: ClipboardItem) {  }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    fn read_from_primary(&self) -> Option<ClipboardItem> { None }
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    fn write_to_primary(&self, item: ClipboardItem) { _ = item; }
+
+    #[cfg(target_os = "macos")]
     fn read_from_find_pasteboard(&self) -> Option<ClipboardItem> { todo!("headless: read_from_find_pasteboard") }
-    fn write_to_find_pasteboard(&self, item: ClipboardItem) {  }
+    #[cfg(target_os = "macos")]
+    fn write_to_find_pasteboard(&self, item: ClipboardItem) { _ = item; }
     fn write_credentials(&self, url: &str, username: &str, password: &[u8]) -> Task<Result<()>> { todo!("headless: write_credentials") }
     fn read_credentials(&self, url: &str) -> Task<Result<Option<(String, Vec<u8>)>>> { todo!("headless: read_credentials") }
     fn delete_credentials(&self, url: &str) -> Task<Result<()>> { todo!("headless: delete_credentials") }
