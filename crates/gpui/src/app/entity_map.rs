@@ -499,6 +499,7 @@ impl<T: 'static> Entity<T> {
     /// the referenced entity still exists, within a visual context that has a window.
     /// Returns an error if the window has been closed.
     #[inline]
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     pub fn update_in<R, C: VisualContext>(
         &self,
         cx: &mut C,

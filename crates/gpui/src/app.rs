@@ -1261,6 +1261,7 @@ impl App {
     /// Opens a new window with the given option and the root view returned by the given function.
     /// The function is invoked with a `Window`, which can be used to interact with window-specific
     /// functionality.
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     pub fn open_window<V: 'static + Render>(
         &mut self,
         options: crate::WindowOptions,
@@ -2758,6 +2759,7 @@ impl App {
 
     /// Registers a renderer specific to an inspector state.
     #[cfg(any(feature = "inspector", debug_assertions))]
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     pub fn register_inspector_element<T: 'static, R: crate::IntoElement>(
         &mut self,
         f: impl 'static + Fn(crate::InspectorElementId, &T, &mut Window, &mut App) -> R,
@@ -2843,6 +2845,7 @@ impl AppContext for App {
         read(entity, self)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn update_window<T, F>(&mut self, handle: AnyWindowHandle, update: F) -> Result<T>
     where
         F: FnOnce(AnyView, &mut Window, &mut App) -> T,
@@ -2850,6 +2853,7 @@ impl AppContext for App {
         self.update_window_id(handle.id, update)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn with_window<R>(
         &mut self,
         entity_id: EntityId,
@@ -2858,6 +2862,7 @@ impl AppContext for App {
         App::with_window(self, entity_id, f)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn read_window<T, R>(
         &self,
         window: &WindowHandle<T>,

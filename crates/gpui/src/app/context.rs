@@ -825,6 +825,7 @@ impl<T> AppContext for Context<'_, T> {
     }
 
     #[inline]
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn update_window<R, F>(&mut self, window: AnyWindowHandle, update: F) -> Result<R>
     where
         F: FnOnce(AnyView, &mut Window, &mut App) -> R,
@@ -833,6 +834,7 @@ impl<T> AppContext for Context<'_, T> {
     }
 
     #[inline]
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn with_window<R>(
         &mut self,
         entity_id: EntityId,
@@ -842,6 +844,7 @@ impl<T> AppContext for Context<'_, T> {
     }
 
     #[inline]
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn read_window<U, R>(
         &self,
         window: &WindowHandle<U>,

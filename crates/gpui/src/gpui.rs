@@ -227,6 +227,7 @@ pub trait AppContext {
         T: 'static;
 
     /// Update a window for the given handle.
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn update_window<T, F>(&mut self, window: AnyWindowHandle, f: F) -> Result<T>
     where
         F: FnOnce(AnyView, &mut Window, &mut App) -> T;
@@ -235,6 +236,7 @@ pub trait AppContext {
     /// rendered window that referenced the entity. Returns `None` if the
     /// entity has no current window or that window is unavailable. See
     /// [`App::with_window`] for the underlying lookup.
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn with_window<R>(
         &mut self,
         entity_id: EntityId,
@@ -242,6 +244,7 @@ pub trait AppContext {
     ) -> Option<R>;
 
     /// Read a window off of the application context.
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn read_window<T, R>(
         &self,
         window: &WindowHandle<T>,
@@ -274,6 +277,7 @@ impl<T: 'static> Reservation<T> {
 
 /// This trait is used for the different visual contexts in GPUI that
 /// require a window to be present.
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
 pub trait VisualContext: AppContext {
     /// The result type for window operations.
     type Result<T>;

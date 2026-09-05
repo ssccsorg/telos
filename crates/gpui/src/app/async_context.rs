@@ -82,6 +82,7 @@ impl AppContext for AsyncApp {
         lock.read_entity(handle, callback)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn update_window<T, F>(&mut self, window: AnyWindowHandle, f: F) -> Result<T>
     where
         F: FnOnce(AnyView, &mut Window, &mut App) -> T,
@@ -94,6 +95,7 @@ impl AppContext for AsyncApp {
         lock.update_window(window, f)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn with_window<R>(
         &mut self,
         entity_id: EntityId,
@@ -107,6 +109,7 @@ impl AppContext for AsyncApp {
         lock.with_window(entity_id, f)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn read_window<T, R>(
         &self,
         window: &WindowHandle<T>,
@@ -185,6 +188,7 @@ impl AsyncApp {
     }
 
     /// Open a window with the given options based on the root view returned by the given function.
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     pub fn open_window<V>(
         &self,
         options: crate::WindowOptions,
@@ -443,6 +447,7 @@ impl AppContext for AsyncWindowContext {
         self.app.read_entity(handle, read)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn update_window<T, F>(&mut self, window: AnyWindowHandle, update: F) -> Result<T>
     where
         F: FnOnce(AnyView, &mut Window, &mut App) -> T,
@@ -450,6 +455,7 @@ impl AppContext for AsyncWindowContext {
         self.app.update_window(window, update)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn with_window<R>(
         &mut self,
         entity_id: EntityId,
@@ -458,6 +464,7 @@ impl AppContext for AsyncWindowContext {
         self.app.with_window(entity_id, f)
     }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
     fn read_window<T, R>(
         &self,
         window: &WindowHandle<T>,
@@ -485,6 +492,7 @@ impl AppContext for AsyncWindowContext {
     }
 }
 
+#[cfg(any(test, feature = "test-support", feature = "ui"))]
 impl VisualContext for AsyncWindowContext {
     type Result<T> = Result<T>;
 
