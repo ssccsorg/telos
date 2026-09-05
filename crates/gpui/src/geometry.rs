@@ -16,6 +16,7 @@ use std::{
     hash::Hash,
     ops::{Add, Div, Mul, MulAssign, Neg, Sub},
 };
+#[cfg(feature = "ui")]
 use taffy::prelude::{TaffyGridLine, TaffyGridSpan};
 
 use crate::{App, DisplayId};
@@ -3809,6 +3810,7 @@ pub enum GridPlacement {
     Auto,
 }
 
+#[cfg(feature = "ui")]
 impl From<GridPlacement> for taffy::GridPlacement {
     fn from(placement: GridPlacement) -> Self {
         match placement {
