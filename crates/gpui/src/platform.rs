@@ -41,12 +41,12 @@ use crate::{
     Action, App, AsyncWindowContext, BackgroundExecutor, Bounds,
     DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Edges, ExternalDragPayload, Font,
     FontId, FontMetrics, FontRun, ForegroundExecutor, GlyphId, GpuSpecs, Hsla, Keymap, LineLayout,
-    Pixels, PlatformGestures, PlatformInput, Point, Priority, RenderGlyphParams, RenderImageParams,
+    Pixels, PlatformGestures, PlatformInput, Point, Priority, RenderGlyphParams,
     Scene, ShapedGlyph, ShapedRun, SharedString, Size, SystemWindowTab, Task, Window,
     WindowControlArea, hash, point, px, size,
 };
 #[cfg(feature = "ui")]
-use crate::{ImageSource, RenderImage, RenderSvgParams, SvgRenderer};
+use crate::{ImageSource, RenderImage, RenderImageParams, RenderSvgParams, SvgRenderer};
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use anyhow::bail;
 use anyhow::{Context as _, Result};
@@ -1342,6 +1342,7 @@ pub enum AtlasKey {
     Glyph(RenderGlyphParams),
     #[cfg(feature = "ui")]
     Svg(RenderSvgParams),
+    #[cfg(feature = "ui")]
     Image(RenderImageParams),
 }
 
@@ -1385,6 +1386,7 @@ impl From<RenderSvgParams> for AtlasKey {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<RenderImageParams> for AtlasKey {
     fn from(params: RenderImageParams) -> Self {
         Self::Image(params)
