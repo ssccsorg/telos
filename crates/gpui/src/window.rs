@@ -21,7 +21,7 @@ use crate::{
     StrikethroughStyle, Style, SubpixelSprite, SubscriberSet, Subscription, SystemWindowTab,
     SystemWindowTabController, TabStopMap, TaffyLayoutEngine, Task, TextInputConfiguration,
     TextRenderingMode, TextStyle, TextStyleRefinement, ThermalState, TransformationMatrix,
-    Underline, UnderlineStyle, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
+    Underline, UnderlineStyle, DEFAULT_WINDOW_SIZE, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
     WindowControls, WindowDecorations, WindowId, WindowOptions, WindowParams, WindowTextSystem,
     point, prelude::*, px, rems, size, transparent_black,
 };
@@ -79,7 +79,6 @@ use crate::util::{
 pub use prompts::*;
 
 /// Default window size used when no explicit size is provided.
-pub const DEFAULT_WINDOW_SIZE: Size<Pixels> = size(px(1536.), px(1095.));
 
 /// A 6:5 aspect ratio minimum window size to be used for functional,
 /// additional-to-main-Zed windows, like the settings and rules library windows.
