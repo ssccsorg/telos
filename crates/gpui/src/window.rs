@@ -5,7 +5,8 @@ use crate::Inspector;
 #[cfg(feature = "profiler")]
 use crate::profiler;
 use crate::{
-    Action, AnyDrag, AnyElement, AnyImageCache, AnyTooltip, AnyView, App, AppContext, Arena, Asset,
+    Action, AnyDrag, AnyElement, AnyImageCache, AnyTooltip, AnyView, AnyWindowHandle, App,
+    AppContext, Arena, Asset,
     AsyncWindowContext, AtlasTile, AvailableSpace, Background, BorderStyle, Bounds, BoxShadow,
     Capslock, Context, Corners, CursorHideMode, CursorStyle, Decorations, DevicePixels,
     DispatchActionListener, DispatchNodeId, DispatchTree, DisplayId, Edges, Effect, Entity,
@@ -6619,24 +6620,7 @@ impl<V: 'static> From<WindowHandle<V>> for AnyWindowHandle {
     }
 }
 
-/// A handle to a window with any root view type, which can be downcast to a window with a specific root view type.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct AnyWindowHandle {
-    pub(crate) id: WindowId,
-    state_type: TypeId,
-    root_entity_type_name: &'static str,
-}
-
 impl AnyWindowHandle {
-    /// Get the ID of this window.
-    pub fn window_id(&self) -> WindowId {
-        self.id
-    }
-
-    /// Returns the name of the window's declared root entity type.
-    pub fn root_entity_type_name(&self) -> &'static str {
-        self.root_entity_type_name
-    }
 
     /// Attempt to convert this handle to a window handle with a specific root view type.
     /// If the types do not match, this will return `None`.

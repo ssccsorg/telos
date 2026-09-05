@@ -38,7 +38,7 @@ pub(crate) type PlatformScreenCaptureFrame = ();
 pub(crate) type PlatformScreenCaptureFrame = core_video::image_buffer::CVImageBuffer;
 
 use crate::{
-    Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
+    Action, App, AsyncWindowContext, BackgroundExecutor, Bounds,
     DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Edges, ExternalDragPayload, Font,
     FontId, FontMetrics, FontRun, ForegroundExecutor, GlyphId, GpuSpecs, Hsla, Keymap, LineLayout,
     Pixels, PlatformGestures, PlatformInput, Point, Priority, RenderGlyphParams, RenderImageParams,
@@ -69,6 +69,7 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::borrow::Cow;
+use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 #[cfg(feature = "ui")]
 use std::io::Cursor;
@@ -153,6 +154,29 @@ impl WindowId {
 impl From<u64> for WindowId {
     fn from(value: u64) -> Self {
         WindowId(slotmap::KeyData::from_ffi(value))
+    }
+}
+
+
+/// A handle to a window with any root view type, which can be downcast to a
+/// window with a specific root view type. The downcast/update/read methods
+/// live with the window ui cluster; the platform core keeps the identity.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct AnyWindowHandle {
+    pub(crate) id: WindowId,
+    pub(crate) state_type: TypeId,
+    pub(crate) root_entity_type_name: &'static str,
+}
+
+impl AnyWindowHandle {
+    /// Get the ID of this window.
+    pub fn window_id(&self) -> WindowId {
+        self.id
+    }
+
+    /// Returns the name of the window's declared root entity type.
+    pub fn root_entity_type_name(&self) -> &'static str {
+        self.root_entity_type_name
     }
 }
 
