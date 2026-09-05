@@ -20,7 +20,9 @@ mod color;
 pub mod colors;
 #[cfg(feature = "profiler")]
 mod debug_overlay;
+#[cfg(feature = "ui")]
 mod element;
+#[cfg(feature = "ui")]
 mod elements;
 mod executor;
 mod platform_scheduler;
@@ -40,21 +42,27 @@ pub mod profiler;
 // run loops) and by platform dispatchers. Compiled on every platform.
 #[expect(missing_docs)]
 pub mod queue;
+#[cfg(feature = "ui")]
 mod scene;
 mod shared_uri;
 mod spring;
 mod style;
+#[cfg(feature = "ui")]
 mod styled;
 mod subscription;
 #[cfg(feature = "ui")]
 mod svg_renderer;
 mod tab_stop;
+#[cfg(feature = "ui")]
+#[cfg(feature = "ui")]
 mod taffy;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test;
 mod text_system;
 mod util;
+#[cfg(feature = "ui")]
 mod view;
+#[cfg(feature = "ui")]
 mod window;
 
 #[cfg(any(test, feature = "test-support"))]
@@ -140,22 +148,28 @@ pub use profiler::*;
 #[cfg(any(target_os = "windows", target_os = "linux", target_family = "wasm"))]
 pub use queue::{PriorityQueueReceiver, PriorityQueueSender};
 pub use refineable::*;
+#[cfg(feature = "ui")]
 pub use scene::*;
 pub use shared_uri::*;
 use std::{any::Any, future::Future};
 pub use style::*;
+#[cfg(feature = "ui")]
 pub use styled::*;
 pub use subscription::*;
 #[cfg(feature = "ui")]
 pub use svg_renderer::*;
 pub(crate) use tab_stop::*;
+#[cfg(feature = "ui")]
 use taffy::TaffyLayoutEngine;
+#[cfg(feature = "ui")]
 pub use taffy::{AvailableSpace, LayoutId};
 #[cfg(any(test, feature = "test-support"))]
 pub use test::*;
 pub use text_system::*;
 pub use util::{FutureExt, Timeout};
+#[cfg(feature = "ui")]
 pub use view::*;
+#[cfg(feature = "ui")]
 pub use window::*;
 
 pub use pollster::block_on;
