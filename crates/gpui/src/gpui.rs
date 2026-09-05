@@ -28,10 +28,13 @@ mod executor;
 mod platform_scheduler;
 pub(crate) use platform_scheduler::PlatformScheduler;
 mod geometry;
+#[cfg(feature = "ui")]
 mod gestures;
 mod global;
 mod inspector;
+#[cfg(feature = "ui")]
 mod interactive;
+#[cfg(feature = "ui")]
 mod key_dispatch;
 mod keymap;
 mod platform;
@@ -52,6 +55,7 @@ mod styled;
 mod subscription;
 #[cfg(feature = "ui")]
 mod svg_renderer;
+#[cfg(feature = "ui")]
 mod tab_stop;
 #[cfg(feature = "ui")]
 #[cfg(feature = "ui")]
@@ -102,10 +106,13 @@ pub use color::*;
 pub use ctor::ctor;
 #[cfg(feature = "profiler")]
 pub use debug_overlay::*;
+#[cfg(feature = "ui")]
 pub use element::*;
+#[cfg(feature = "ui")]
 pub use elements::*;
 pub use executor::*;
 pub use geometry::*;
+#[cfg(feature = "ui")]
 pub use gestures::*;
 pub use global::*;
 pub use gpui_macros::{
@@ -140,7 +147,9 @@ pub use gpui_shared_string::*;
 pub use gpui_util::arc_cow::ArcCow;
 pub use http_client;
 pub use inspector::*;
+#[cfg(feature = "ui")]
 pub use interactive::*;
+#[cfg(feature = "ui")]
 use key_dispatch::*;
 pub use keymap::*;
 pub use platform::*;
@@ -158,6 +167,7 @@ pub use styled::*;
 pub use subscription::*;
 #[cfg(feature = "ui")]
 pub use svg_renderer::*;
+#[cfg(feature = "ui")]
 pub(crate) use tab_stop::*;
 #[cfg(feature = "ui")]
 use taffy::TaffyLayoutEngine;
