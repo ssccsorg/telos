@@ -1246,6 +1246,7 @@ pub enum Position {
     Absolute,
 }
 
+#[cfg(feature = "ui")]
 impl From<AlignItems> for taffy::style::AlignItems {
     fn from(value: AlignItems) -> Self {
         match value {
@@ -1260,6 +1261,7 @@ impl From<AlignItems> for taffy::style::AlignItems {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<AlignContent> for taffy::style::AlignContent {
     fn from(value: AlignContent) -> Self {
         match value {
@@ -1276,6 +1278,7 @@ impl From<AlignContent> for taffy::style::AlignContent {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<Display> for taffy::style::Display {
     fn from(value: Display) -> Self {
         match value {
@@ -1287,6 +1290,7 @@ impl From<Display> for taffy::style::Display {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<FlexWrap> for taffy::style::FlexWrap {
     fn from(value: FlexWrap) -> Self {
         match value {
@@ -1297,6 +1301,7 @@ impl From<FlexWrap> for taffy::style::FlexWrap {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<FlexDirection> for taffy::style::FlexDirection {
     fn from(value: FlexDirection) -> Self {
         match value {
@@ -1308,6 +1313,7 @@ impl From<FlexDirection> for taffy::style::FlexDirection {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<Overflow> for taffy::style::Overflow {
     fn from(value: Overflow) -> Self {
         match value {
@@ -1319,6 +1325,7 @@ impl From<Overflow> for taffy::style::Overflow {
     }
 }
 
+#[cfg(feature = "ui")]
 impl From<Position> for taffy::style::Position {
     fn from(value: Position) -> Self {
         match value {
