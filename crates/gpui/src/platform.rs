@@ -15,6 +15,9 @@ mod threaded_dispatcher;
 
 mod headless;
 
+#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+mod test;
+
 #[cfg(all(
     feature = "screen-capture",
     any(target_os = "windows", target_os = "linux", target_os = "freebsd",)
@@ -114,6 +117,9 @@ pub use threaded_dispatcher::ThreadedDispatcher;
 // Headless platform over [`ThreadedDispatcher`]; used by the telos agent
 // binary instead of the windowed platform backends.
 pub use headless::HeadlessPlatform;
+
+#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+pub use test::TestDispatcher;
 
 // TODO(jk): return an enum instead of a string
 /// Return which compositor we're guessing we'll use.
