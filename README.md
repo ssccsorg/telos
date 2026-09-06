@@ -52,12 +52,19 @@ tests.
 ## Distribution
 
 A prebuilt agent image is published to `ghcr.io/ssccsorg/telos` on main
-pushes and version tags (`latest`, `main`, and tag-named tags). Downstream
-CI (actus) pulls the image and runs its real-agent conformance tier
-against the binary at the stable image path
-`/workspace/target/telos-release/tel`, so consumers never rebuild the
-telos workspace. The stripped release binary is about 46 MiB; an
-unstripped debug build is around 279 MB.
+pushes and version tags (`latest`, `main`, and tag-named tags). The
+package is public, so any project can pull the binary without logging
+in and without building telos:
+
+```sh
+docker pull ghcr.io/ssccsorg/telos:latest
+docker run --rm ghcr.io/ssccsorg/telos:latest /workspace/target/telos-release/tel --help
+```
+
+The stable binary path inside the image is
+`/workspace/target/telos-release/tel`; actus CI runs its real-agent
+conformance tier against that path. The stripped release binary is about
+46 MiB; an unstripped debug build is around 279 MB.
 
 The build disables `language_models/extension-support`, so wasm extension
 hosted LLM providers and the wasmtime/cranelift chain they drag in are
