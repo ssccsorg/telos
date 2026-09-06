@@ -24,6 +24,8 @@ mod geometry;
 mod global;
 mod keymap;
 mod platform;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test;
 pub mod prelude;
 /// Profiling utilities for task, frame, and thread performance tracking.
 pub mod profiler;
@@ -60,6 +62,8 @@ pub use accesskit::{Orientation, Role, Toggled};
 pub use action::*;
 pub use anyhow::Result;
 pub use app::*;
+#[cfg(any(test, feature = "test-support"))]
+pub use test::*;
 pub(crate) use arena::*;
 pub use asset_cache::*;
 pub use assets::*;

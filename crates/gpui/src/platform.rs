@@ -119,7 +119,7 @@ pub use threaded_dispatcher::ThreadedDispatcher;
 pub use headless::HeadlessPlatform;
 
 #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
-pub use test::TestDispatcher;
+pub use test::{TestDispatcher, TestPlatform};
 
 // TODO(jk): return an enum instead of a string
 /// Return which compositor we're guessing we'll use.

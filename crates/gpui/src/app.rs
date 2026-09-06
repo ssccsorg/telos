@@ -46,6 +46,10 @@ use crate::{RenderImage, SvgRenderer};
 mod async_context;
 mod context;
 mod entity_map;
+#[cfg(any(test, feature = "test-support"))]
+mod test_context;
+#[cfg(any(test, feature = "test-support"))]
+pub use test_context::*;
 
 /// The duration for which futures returned from [Context::on_app_quit] can run before the application fully quits.
 pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(200);
