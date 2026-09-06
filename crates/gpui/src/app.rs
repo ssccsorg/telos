@@ -1902,47 +1902,6 @@ impl AppContext for App {
         read(entity, self)
     }
 
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
-    fn update_window<T, F>(&mut self, handle: AnyWindowHandle, update: F) -> Result<T>
-    where
-        F: FnOnce(AnyView, &mut Window, &mut App) -> T,
-    {
-        self.update_window_id(handle.id, update)
-    }
-
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
-    fn with_window<R>(
-        &mut self,
-        entity_id: EntityId,
-        f: impl FnOnce(&mut Window, &mut App) -> R,
-    ) -> Option<R> {
-        App::with_window(self, entity_id, f)
-    }
-
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
-    fn read_window<T, R>(
-        &self,
-        window: &WindowHandle<T>,
-        read: impl FnOnce(Entity<T>, &App) -> R,
-    ) -> Result<R>
-    where
-        T: 'static,
-    {
-        let window = self
-            .windows
-            .get(window.id)
-            .context("window not found")?
-            .as_deref()
-            .expect("attempted to read a window that is already on the stack");
-
-        let root_view = window.root.clone().unwrap();
-        let view = root_view
-            .downcast::<T>()
-            .map_err(|_| anyhow!("root view's type has changed"))?;
-
-        Ok(read(view, self))
-    }
-
     fn background_spawn<R>(&self, future: impl Future<Output = R> + Send + 'static) -> Task<R>
     where
         R: Send + 'static,

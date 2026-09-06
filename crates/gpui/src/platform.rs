@@ -62,8 +62,6 @@ use crate::{
     px,
     size,
 };
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
-use crate::{DispatchEventResult, ExternalDragPayload, PlatformGestures, PlatformInput, Scene, Window, WindowControlArea};
 #[cfg(feature = "ui")]
 use crate::{ImageSource, RenderImage, RenderImageParams, RenderSvgParams, SvgRenderer};
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -109,12 +107,6 @@ pub use app_menu::*;
 pub use keyboard::*;
 pub use keystroke::*;
 
-#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
-pub(crate) use test::*;
-
-#[cfg(any(test, feature = "test-support"))]
-pub use test::{TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream};
-
 // Production primitive for headless run loops: a real-time, OS-free
 // dispatcher whose main thread parks between runnables.
 pub use threaded_dispatcher::ThreadedDispatcher;
@@ -122,9 +114,6 @@ pub use threaded_dispatcher::ThreadedDispatcher;
 // Headless platform over [`ThreadedDispatcher`]; used by the telos agent
 // binary instead of the windowed platform backends.
 pub use headless::HeadlessPlatform;
-
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
-pub use visual_test::VisualTestPlatform;
 
 // TODO(jk): return an enum instead of a string
 /// Return which compositor we're guessing we'll use.
