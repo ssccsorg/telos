@@ -3,14 +3,11 @@ name = "gpui"
 version = "0.2.2"
 edition.workspace = true
 authors = ["Nathan Sobo <nathan@zed.dev>"]
-description = "Zed's GPU-accelerated UI framework"
-repository = "https://github.com/zed-industries/zed"
+description = "Headless application and entity runtime for the SSCCS agent stack (fork of Zed GPUI, UI layer disabled)"
+repository = "https://github.com/ssccsorg/telos"
 publish = true
 license = "Apache-2.0"
-homepage = "https://gpui.rs"
 readme = "README.md"
-keywords = ["desktop", "gui", "immediate"]
-categories = ["gui"]
 
 
 [lints]
@@ -47,7 +44,6 @@ path = "src/gpui.rs"
 doctest = false
 
 [dependencies]
-accesskit.workspace = true
 anyhow.workspace = true
 async-task.workspace = true
 backtrace = { workspace = true, optional = true }
@@ -74,7 +70,6 @@ proptest = { workspace = true, optional = true }
 chrono.workspace = true
 profiling.workspace = true
 rand.workspace = true
-raw-window-handle.workspace = true
 regex.workspace = true
 refineable.workspace = true
 scheduler.workspace = true
