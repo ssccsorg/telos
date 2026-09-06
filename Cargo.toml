@@ -35,7 +35,6 @@ members = [
     "crates/google_ai",
     "crates/gpui",
     "crates/gpui_macros",
-    "crates/gpui_platform",
     "crates/gpui_shared_string",
     "crates/gpui_tokio",
     "crates/gpui_util",
@@ -107,7 +106,6 @@ members = [
     "crates/ztracing",
     "crates/ztracing_macro",
     "tooling/perf",
-
 ]
 default-members = ["crates/telos"]
 
@@ -144,7 +142,6 @@ db = { path = "crates/db" }
 deepseek = { path = "crates/deepseek" }
 derive_refineable = { path = "crates/refineable/derive_refineable" }
 env_var = { path = "crates/env_var" }
-eval_utils = { path = "crates/eval_utils" }
 extension = { path = "crates/extension" }
 extension_host = { path = "crates/extension_host" }
 external_websocket_sync = { path = "crates/external_websocket_sync" }
@@ -157,17 +154,10 @@ git = { path = "crates/git" }
 git_hosting_providers = { path = "crates/git_hosting_providers" }
 google_ai = { path = "crates/google_ai" }
 gpui = { path = "crates/gpui", default-features = false }
-gpui_apple = { path = "crates/gpui_apple" }
-gpui_linux = { path = "crates/gpui_linux", default-features = false }
-gpui_macos = { path = "crates/gpui_macos", default-features = false }
 gpui_macros = { path = "crates/gpui_macros" }
-gpui_platform = { path = "crates/gpui_platform", default-features = false }
 gpui_shared_string = { path = "crates/gpui_shared_string" }
 gpui_tokio = { path = "crates/gpui_tokio" }
 gpui_util = { path = "crates/gpui_util" }
-gpui_web = { path = "crates/gpui_web" }
-gpui_wgpu = { path = "crates/gpui_wgpu" }
-gpui_windows = { path = "crates/gpui_windows", default-features = false }
 grammars = { path = "crates/grammars" }
 html_to_markdown = { path = "crates/html_to_markdown" }
 http_client = { path = "crates/http_client" }
