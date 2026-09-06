@@ -10,6 +10,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(any(test, feature = "leak-detection"))]
+use std::sync::RwLock;
+
 use anyhow::{Context as _, Result};
 use derive_more::{Deref, DerefMut};
 use futures::{
@@ -785,45 +788,6 @@ impl App {
     /// Returns a handle to the window that is currently focused at the platform level, if one exists.
     pub fn active_window(&self) -> Option<AnyWindowHandle> {
         self.platform.active_window()
-    }
-
-    /// Opens a new window with the given option and the root view returned by the given function.
-    /// The function is invoked with a `Window`, which can be used to interact with window-specific
-    /// functionality.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
-    pub fn open_window<V: 'static + Render>(
-        &mut self,
-        options: crate::WindowOptions,
-        build_root_view: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
-    ) -> anyhow::Result<WindowHandle<V>> {
-        self.update(|cx| {
-            let id = cx.windows.insert(None);
-            let handle = WindowHandle::new(id);
-            match Window::new(handle.into(), options, cx) {
-                Ok(mut window) => {
-                    cx.window_update_stack.push(id);
-                    let root_view = build_root_view(&mut window, cx);
-                    cx.window_update_stack.pop();
-                    window.root.replace(root_view.into());
-                    window.defer(cx, |window: &mut Window, cx| window.appearance_changed(cx));
-
-                    // allow a window to draw at least once before returning
-                    // this didn't cause any issues on non windows platforms as it seems we always won the race to on_request_frame
-                    // on windows we quite frequently lose the race and return a window that has never rendered, which leads to a crash
-                    // where DispatchTree::root_node_id asserts on empty nodes
-                    let clear = window.draw(cx);
-                    clear.clear(cx);
-
-                    cx.window_handles.insert(id, window.handle);
-                    cx.windows.get_mut(id).unwrap().replace(Box::new(window));
-                    Ok(handle)
-                }
-                Err(e) => {
-                    cx.windows.remove(id);
-                    Err(e)
-                }
-            }
-        })
     }
 
     /// Instructs the platform to activate the application by bringing it to the foreground.
