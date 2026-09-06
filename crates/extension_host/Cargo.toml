@@ -72,9 +72,5 @@ theme_settings.workspace = true
 theme_extension.workspace = true
 zlog.workspace = true
 
-[[bench]]
-name = "extension_compilation_benchmark"
-harness = false
-
 [package.metadata.cargo-shear]
 ignored = ["tracing"]
