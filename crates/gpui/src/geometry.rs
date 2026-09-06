@@ -3245,10 +3245,6 @@ impl Rems {
     pub fn to_pixels(self, rem_size: Pixels) -> Pixels {
         self * rem_size
     }
-    /// Convert from pixels to Rem
-    pub fn from_pixels(length: Pixels, window: &gpui::Window) -> Self {
-        Self(length / window.rem_size())
-    }
 }
 
 impl Mul<Pixels> for Rems {

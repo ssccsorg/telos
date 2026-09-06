@@ -1,22 +1,26 @@
-use crate::{
-    Action, AnyView, AnyWindowHandle, App, AppCell, AppContext, AsyncApp, AvailableSpace,
-    BackgroundExecutor, BorrowAppContext, Bounds, Capslock, ClipboardItem, DrawPhase, Drawable,
-    Element, Empty, EntityId, EventEmitter, ForegroundExecutor, Global, InputEvent, Keystroke,
-    Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    Pixels, Platform, Point, Render, Result, SharedString, Size, SystemNotification,
-    SystemNotificationResponse, Task, TestDispatcher, TestPlatform, TestScreenCaptureSource,
-    TestWindow, TextSystem, VisualContext, Window, WindowBounds, WindowHandle, WindowOptions,
-    app::GpuiMode, window::ElementArenaScope,
-};
-use anyhow::{anyhow, bail};
-use futures::{Stream, StreamExt, channel::oneshot};
+//! Minimal headless test context for `#[gpui::test]`.
+//!
+//! The upstream windowed test harness (windows, visual contexts) was removed
+//! with the ui layer. This context keeps the deterministic, window-free core
+//! that headless agent tests rely on: an [`App`] built over the
+//! [`TestPlatform`] and [`TestDispatcher`], with entity and global helpers.
 
 use std::{
-    cell::RefCell, future::Future, ops::Deref, path::PathBuf, rc::Rc, sync::Arc, time::Duration,
+    cell::RefCell,
+    future::Future,
+    path::PathBuf,
+    rc::Rc,
+    sync::Arc,
 };
 
-/// A TestAppContext is provided to tests created with `#[gpui::test]`, it provides
-/// an implementation of `Context` with additional methods that are useful in tests.
+use futures::channel::oneshot;
+
+use super::*;
+use crate::{BorrowAppContext as _, SharedString, TestDispatcher, TestPlatform};
+
+/// A `TestAppContext` is provided to tests created with `#[gpui::test]`. It
+/// implements [`AppContext`] over a window-free [`App`] and adds helpers that
+/// are useful in tests.
 #[derive(Clone)]
 pub struct TestAppContext {
     #[doc(hidden)]
@@ -26,7 +30,6 @@ pub struct TestAppContext {
     #[doc(hidden)]
     pub dispatcher: TestDispatcher,
     test_platform: Rc<TestPlatform>,
-    text_system: Arc<TextSystem>,
     fn_name: Option<&'static str>,
     on_quit: Rc<RefCell<Vec<Box<dyn FnOnce() + 'static>>>>,
     #[doc(hidden)]
@@ -62,11 +65,11 @@ impl AppContext for TestAppContext {
         app.update_entity(handle, update)
     }
 
-    fn as_mut<'a, T>(&'a mut self, _: &Entity<T>) -> super::GpuiBorrow<'a, T>
+    fn as_mut<'a, T>(&'a mut self, _: &Entity<T>) -> GpuiBorrow<'a, T>
     where
         T: 'static,
     {
-        panic!("Cannot use as_mut with a test app context. Try calling update() first")
+        panic!("cannot use as_mut with a test app context; call update() first")
     }
 
     fn read_entity<T, R>(&self, handle: &Entity<T>, read: impl FnOnce(&T, &App) -> R) -> R
@@ -75,35 +78,6 @@ impl AppContext for TestAppContext {
     {
         let app = self.app.borrow();
         app.read_entity(handle, read)
-    }
-
-    fn update_window<T, F>(&mut self, window: AnyWindowHandle, f: F) -> Result<T>
-    where
-        F: FnOnce(AnyView, &mut Window, &mut App) -> T,
-    {
-        let mut lock = self.app.borrow_mut();
-        lock.update_window(window, f)
-    }
-
-    fn with_window<R>(
-        &mut self,
-        entity_id: EntityId,
-        f: impl FnOnce(&mut Window, &mut App) -> R,
-    ) -> Option<R> {
-        let mut lock = self.app.borrow_mut();
-        lock.with_window(entity_id, f)
-    }
-
-    fn read_window<T, R>(
-        &self,
-        window: &WindowHandle<T>,
-        read: impl FnOnce(Entity<T>, &App) -> R,
-    ) -> Result<R>
-    where
-        T: 'static,
-    {
-        let app = self.app.borrow();
-        app.read_window(window, read)
     }
 
     fn background_spawn<R>(&self, future: impl Future<Output = R> + Send + 'static) -> Task<R>
@@ -123,302 +97,67 @@ impl AppContext for TestAppContext {
 }
 
 impl TestAppContext {
-    /// Creates a new `TestAppContext`. Usually you can rely on `#[gpui::test]` to do this for you.
+    /// Creates a new `TestAppContext`. Usually `#[gpui::test]` does this.
     pub fn build(dispatcher: TestDispatcher, fn_name: Option<&'static str>) -> Self {
-        let arc_dispatcher = Arc::new(dispatcher.clone());
-        let background_executor = BackgroundExecutor::new(arc_dispatcher.clone());
-        let foreground_executor = ForegroundExecutor::new(arc_dispatcher);
-        let platform = TestPlatform::new(background_executor.clone(), foreground_executor.clone());
+        let test_platform = TestPlatform::new(dispatcher.clone());
+        let background_executor = test_platform.background_executor();
+        let foreground_executor = test_platform.foreground_executor();
         let asset_source = Arc::new(());
         let http_client = http_client::FakeHttpClient::with_404_response();
-        let text_system = Arc::new(TextSystem::new(platform.text_system()));
 
-        let app = App::new_app(platform.clone(), asset_source, http_client);
-        app.borrow_mut().mode = GpuiMode::test();
+        let app = App::new_app(test_platform.clone(), asset_source, http_client);
 
         Self {
             app,
             background_executor,
             foreground_executor,
             dispatcher,
-            test_platform: platform,
-            text_system,
+            test_platform,
             fn_name,
             on_quit: Rc::new(RefCell::new(Vec::default())),
         }
     }
 
-    /// Skip all drawing operations for the duration of this test.
-    pub fn skip_drawing(&mut self) {
-        self.app.borrow_mut().mode = GpuiMode::Test { skip_drawing: true };
-    }
-
-    /// Create a single TestAppContext, for non-multi-client tests
+    /// Create a single `TestAppContext`, for non-multi-client tests.
     pub fn single() -> Self {
-        let dispatcher = TestDispatcher::new(0);
-        Self::build(dispatcher, None)
+        Self::build(TestDispatcher::new(0), None)
     }
 
-    /// The name of the test function that created this `TestAppContext`
+    /// The name of the test function that created this `TestAppContext`.
     pub fn test_function_name(&self) -> Option<&'static str> {
         self.fn_name
     }
 
-    /// Checks whether there have been any new path prompts received by the platform.
-    pub fn did_prompt_for_new_path(&self) -> bool {
-        self.test_platform.did_prompt_for_new_path()
-    }
-
-    /// returns a new `TestAppContext` re-using the same executors to interleave tasks.
-    pub fn new_app(&self) -> TestAppContext {
-        Self::build(self.dispatcher.clone(), self.fn_name)
-    }
-
-    /// Called by the test helper to end the test.
-    /// public so the macro can call it.
-    pub fn quit(&self) {
-        self.on_quit.borrow_mut().drain(..).for_each(|f| f());
-        self.app.borrow_mut().shutdown();
-    }
-
-    /// Register cleanup to run when the test ends.
-    pub fn on_quit(&mut self, f: impl FnOnce() + 'static) {
-        self.on_quit.borrow_mut().push(Box::new(f));
-    }
-
-    /// Schedules all windows to be redrawn on the next effect cycle.
-    pub fn refresh(&mut self) -> Result<()> {
-        let mut app = self.app.borrow_mut();
-        app.refresh_windows();
-        Ok(())
-    }
-
-    /// Returns an executor (for running tasks in the background)
+    /// Returns an executor for running tasks in the background.
     pub fn executor(&self) -> BackgroundExecutor {
         self.background_executor.clone()
     }
 
-    /// Returns an executor (for running tasks on the main thread)
+    /// Returns an executor for running tasks on the main thread.
     pub fn foreground_executor(&self) -> &ForegroundExecutor {
         &self.foreground_executor
     }
 
-    /// Gives you an `&mut App` for the duration of the closure
+    /// Gives you an `&mut App` for the duration of the closure.
     pub fn update<R>(&self, f: impl FnOnce(&mut App) -> R) -> R {
         let mut cx = self.app.borrow_mut();
         cx.update(f)
     }
 
-    /// Gives you an `&App` for the duration of the closure
+    /// Gives you an `&App` for the duration of the closure.
     pub fn read<R>(&self, f: impl FnOnce(&App) -> R) -> R {
         let cx = self.app.borrow();
         f(&cx)
     }
 
-    /// Adds a new window. The Window will always be backed by a `TestWindow` which
-    /// can be retrieved with `self.test_window(handle)`
-    pub fn add_window<F, V>(&mut self, build_window: F) -> WindowHandle<V>
-    where
-        F: FnOnce(&mut Window, &mut Context<V>) -> V,
-        V: 'static + Render,
-    {
-        let mut cx = self.app.borrow_mut();
-
-        // Some tests rely on the window size matching the bounds of the test display
-        let bounds = Bounds::maximized(None, &cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
-            },
-            |window, cx| cx.new(|cx| build_window(window, cx)),
-        )
-        .unwrap()
+    /// Runs the dispatcher until it has no more work to do.
+    pub fn run_until_parked(&self) {
+        self.dispatcher.run_until_parked()
     }
 
-    /// Opens a new window with a specific size.
-    ///
-    /// Unlike `add_window` which uses maximized bounds, this allows controlling
-    /// the window dimensions, which is important for layout-sensitive tests.
-    pub fn open_window<F, V>(
-        &mut self,
-        window_size: Size<Pixels>,
-        build_window: F,
-    ) -> WindowHandle<V>
-    where
-        F: FnOnce(&mut Window, &mut Context<V>) -> V,
-        V: 'static + Render,
-    {
-        let mut cx = self.app.borrow_mut();
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: Point::default(),
-                    size: window_size,
-                })),
-                ..Default::default()
-            },
-            |window, cx| cx.new(|cx| build_window(window, cx)),
-        )
-        .unwrap()
-    }
-
-    /// Adds a new window with no content.
-    pub fn add_empty_window(&mut self) -> &mut VisualTestContext {
-        let mut cx = self.app.borrow_mut();
-        let bounds = Bounds::maximized(None, &cx);
-        let window = cx
-            .open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(bounds)),
-                    ..Default::default()
-                },
-                |_, cx| cx.new(|_| Empty),
-            )
-            .unwrap();
-        drop(cx);
-        let cx = VisualTestContext::from_window(*window.deref(), self).into_mut();
-        cx.run_until_parked();
-        cx
-    }
-
-    /// Adds a new window, and returns its root view and a `VisualTestContext` which can be used
-    /// as a `Window` and `App` for the rest of the test. Typically you would shadow this context with
-    /// the returned one. `let (view, cx) = cx.add_window_view(...);`
-    pub fn add_window_view<F, V>(
-        &mut self,
-        build_root_view: F,
-    ) -> (Entity<V>, &mut VisualTestContext)
-    where
-        F: FnOnce(&mut Window, &mut Context<V>) -> V,
-        V: 'static + Render,
-    {
-        let mut cx = self.app.borrow_mut();
-        let bounds = Bounds::maximized(None, &cx);
-        let window = cx
-            .open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(bounds)),
-                    ..Default::default()
-                },
-                |window, cx| cx.new(|cx| build_root_view(window, cx)),
-            )
-            .unwrap();
-        drop(cx);
-        let view = window.root(self).unwrap();
-        let cx = VisualTestContext::from_window(*window.deref(), self).into_mut();
-        cx.run_until_parked();
-
-        // it might be nice to try and cleanup these at the end of each test.
-        (view, cx)
-    }
-
-    /// returns the TextSystem
-    pub fn text_system(&self) -> &Arc<TextSystem> {
-        &self.text_system
-    }
-
-    /// Simulates writing to the platform clipboard
-    pub fn write_to_clipboard(&self, item: ClipboardItem) {
-        self.test_platform.write_to_clipboard(item)
-    }
-
-    /// Simulates reading from the platform clipboard.
-    /// This will return the most recent value from `write_to_clipboard`.
-    pub fn read_from_clipboard(&self) -> Option<ClipboardItem> {
-        self.test_platform.read_from_clipboard()
-    }
-
-    /// Simulates choosing a File in the platform's "Open" dialog.
-    pub fn simulate_new_path_selection(
-        &self,
-        select_path: impl FnOnce(&std::path::Path) -> Option<std::path::PathBuf>,
-    ) {
-        self.test_platform.simulate_new_path_selection(select_path);
-    }
-
-    /// Simulates responding to a `prompt_for_paths` ("Open") dialog.
-    pub fn simulate_path_prompt_response(
-        &self,
-        select_paths: impl FnOnce(&crate::PathPromptOptions) -> Option<Vec<std::path::PathBuf>>,
-    ) {
-        self.test_platform
-            .simulate_path_prompt_response(select_paths);
-    }
-
-    /// Returns true if there's a path selection dialog pending.
-    pub fn did_prompt_for_paths(&self) -> bool {
-        self.test_platform.did_prompt_for_paths()
-    }
-
-    /// Simulates clicking a button in an platform-level alert dialog.
-    #[track_caller]
-    pub fn simulate_prompt_answer(&self, button: &str) {
-        self.test_platform.simulate_prompt_answer(button);
-    }
-
-    /// Returns true if there's an alert dialog open.
-    pub fn has_pending_prompt(&self) -> bool {
-        self.test_platform.has_pending_prompt()
-    }
-
-    /// Returns true if there's an alert dialog open.
-    pub fn pending_prompt(&self) -> Option<(String, String)> {
-        self.test_platform.pending_prompt()
-    }
-
-    /// All the urls that have been opened with cx.open_url() during this test.
-    pub fn opened_url(&self) -> Option<String> {
-        self.test_platform.opened_url.borrow().clone()
-    }
-
-    /// Returns the application identity configured during this test.
-    pub fn app_identity(&self) -> Option<(SharedString, SharedString)> {
-        self.test_platform.app_identity()
-    }
-
-    /// Returns all system notifications shown during this test, in order.
-    pub fn shown_system_notifications(&self) -> Vec<SystemNotification> {
-        self.test_platform.shown_system_notifications()
-    }
-
-    /// Returns the system notifications currently delivered by the test platform.
-    pub fn delivered_system_notifications(&self) -> Vec<SystemNotification> {
-        self.test_platform.delivered_system_notifications()
-    }
-
-    /// Returns the tags of all system notifications dismissed during this test, in order.
-    pub fn dismissed_system_notifications(&self) -> Vec<SharedString> {
-        self.test_platform.dismissed_system_notifications()
-    }
-
-    /// Simulates the user activating a system notification.
-    pub fn simulate_system_notification_response(&self, response: SystemNotificationResponse) {
-        self.test_platform
-            .simulate_system_notification_response(response);
-    }
-
-    /// Simulates the user resizing the window to the new size.
-    pub fn simulate_window_resize(&self, window_handle: AnyWindowHandle, size: Size<Pixels>) {
-        self.test_window(window_handle).simulate_resize(size);
-    }
-
-    /// Returns true if there's an alert dialog open.
-    pub fn expect_restart(&self) -> oneshot::Receiver<(Option<PathBuf>, Vec<std::ffi::OsString>)> {
-        let (tx, rx) = futures::channel::oneshot::channel();
-        self.test_platform.expect_restart.borrow_mut().replace(tx);
-        rx
-    }
-
-    /// Causes the given sources to be returned if the application queries for screen
-    /// capture sources.
-    pub fn set_screen_capture_sources(&self, sources: Vec<TestScreenCaptureSource>) {
-        self.test_platform.set_screen_capture_sources(sources);
-    }
-
-    /// Returns all windows open in the test.
-    pub fn windows(&self) -> Vec<AnyWindowHandle> {
-        self.app.borrow().windows()
+    /// Returns an [`AsyncApp`] bound to this context's app.
+    pub fn to_async(&self) -> AsyncApp {
+        self.app.borrow().to_async()
     }
 
     /// Run the given task on the main thread.
@@ -431,122 +170,107 @@ impl TestAppContext {
         self.foreground_executor.spawn(f(self.to_async()))
     }
 
-    /// true if the given global is defined
+    /// Called by the test helper to end the test; public so the macro can
+    /// call it.
+    pub fn quit(&self) {
+        self.on_quit.borrow_mut().drain(..).for_each(|f| f());
+        self.app.borrow_mut().shutdown();
+    }
+
+    /// Register cleanup to run when the test ends.
+    pub fn on_quit(&mut self, f: impl FnOnce() + 'static) {
+        self.on_quit.borrow_mut().push(Box::new(f));
+    }
+
+    /// Returns whether the given global is present.
     pub fn has_global<G: Global>(&self) -> bool {
-        let app = self.app.borrow();
-        app.has_global::<G>()
+        self.app.borrow().has_global::<G>()
     }
 
-    /// runs the given closure with a reference to the global
-    /// panics if `has_global` would return false.
+    /// Read a global from the app context.
     pub fn read_global<G: Global, R>(&self, read: impl FnOnce(&G, &App) -> R) -> R {
-        let app = self.app.borrow();
-        read(app.global(), &app)
+        self.app.borrow().read_global(read)
     }
 
-    /// runs the given closure with a reference to the global (if set)
-    pub fn try_read_global<G: Global, R>(&self, read: impl FnOnce(&G, &App) -> R) -> Option<R> {
-        let lock = self.app.borrow();
-        Some(read(lock.try_global()?, &lock))
-    }
-
-    /// sets the global in this context.
+    /// Set a global on the app context.
     pub fn set_global<G: Global>(&mut self, global: G) {
-        let mut lock = self.app.borrow_mut();
-        lock.update(|cx| cx.set_global(global))
+        self.app.borrow_mut().set_global(global);
     }
 
-    /// updates the global in this context. (panics if `has_global` would return false)
+    /// Update a global on the app context.
     pub fn update_global<G: Global, R>(&mut self, update: impl FnOnce(&mut G, &mut App) -> R) -> R {
-        let mut lock = self.app.borrow_mut();
-        lock.update(|cx| cx.update_global(update))
+        self.app.borrow_mut().update_global(update)
     }
 
-    /// Returns an `AsyncApp` which can be used to run tasks that expect to be on a background
-    /// thread on the current thread in tests.
-    pub fn to_async(&self) -> AsyncApp {
-        AsyncApp {
-            app: Rc::downgrade(&self.app),
-            background_executor: self.background_executor.clone(),
-            foreground_executor: self.foreground_executor.clone(),
-        }
+    /// Write an item to the test clipboard.
+    pub fn write_to_clipboard(&self, item: ClipboardItem) {
+        *self.test_platform.clipboard.borrow_mut() = Some(item);
     }
 
-    /// Wait until there are no more pending tasks.
-    pub fn run_until_parked(&self) {
-        self.dispatcher.run_until_parked();
+    /// Read the current test clipboard contents.
+    pub fn read_from_clipboard(&self) -> Option<ClipboardItem> {
+        self.test_platform.clipboard.borrow().clone()
     }
 
-    /// Simulate dispatching an action to the currently focused node in the window.
-    pub fn dispatch_action<A>(&mut self, window: AnyWindowHandle, action: A)
-    where
-        A: Action,
-    {
-        window
-            .update(self, |_, window, cx| {
-                window.dispatch_action(action.boxed_clone(), cx)
-            })
-            .unwrap();
-
-        self.background_executor.run_until_parked()
+    /// The most recently opened URL, if any.
+    pub fn opened_url(&self) -> Option<String> {
+        self.test_platform.opened_urls.borrow().last().cloned()
     }
 
-    /// simulate_keystrokes takes a space-separated list of keys to type.
-    /// cx.simulate_keystrokes("cmd-shift-p b k s p enter")
-    /// in Zed, this will run backspace on the current editor through the command palette.
-    /// This will also run the background executor until it's parked.
-    pub fn simulate_keystrokes(&mut self, window: AnyWindowHandle, keystrokes: &str) {
-        for keystroke in keystrokes
-            .split(' ')
-            .map(Keystroke::parse)
-            .map(Result::unwrap)
-        {
-            self.dispatch_keystroke(window, keystroke);
-        }
-
-        self.background_executor.run_until_parked()
-    }
-
-    /// simulate_input takes a string of text to type.
-    /// cx.simulate_input("abc")
-    /// will type abc into your current editor
-    /// This will also run the background executor until it's parked.
-    pub fn simulate_input(&mut self, window: AnyWindowHandle, input: &str) {
-        for keystroke in input.split("").map(Keystroke::parse).map(Result::unwrap) {
-            self.dispatch_keystroke(window, keystroke);
-        }
-
-        self.background_executor.run_until_parked()
-    }
-
-    /// dispatches a single Keystroke (see also `simulate_keystrokes` and `simulate_input`)
-    pub fn dispatch_keystroke(&mut self, window: AnyWindowHandle, keystroke: Keystroke) {
-        self.update_window(window, |_, window, cx| {
-            window.dispatch_keystroke(keystroke, cx)
-        })
-        .unwrap();
-    }
-
-    /// Returns the `TestWindow` backing the given handle.
-    pub(crate) fn test_window(&self, window: AnyWindowHandle) -> TestWindow {
-        self.app
-            .borrow_mut()
-            .windows
-            .get_mut(window.id)
-            .unwrap()
-            .as_deref_mut()
-            .unwrap()
-            .platform_window
-            .as_test()
-            .unwrap()
+    /// The application identity set through the platform, if any.
+    pub fn app_identity(&self) -> Option<(SharedString, SharedString)> {
+        self.test_platform
+            .app_identity
+            .borrow()
             .clone()
+            .map(|(id, name)| (id.into(), name.into()))
+    }
+
+    /// System notifications shown through the platform.
+    pub fn shown_system_notifications(&self) -> Vec<SystemNotification> {
+        self.test_platform.notifications.borrow().clone()
+    }
+
+    /// Tags of system notifications dismissed through the platform.
+    pub fn dismissed_system_notifications(&self) -> Vec<SharedString> {
+        self.test_platform
+            .dismissed_notifications
+            .borrow()
+            .iter()
+            .map(|tag| SharedString::from(tag.as_str()))
+            .collect()
+    }
+
+    /// Simulate a path-picker response for the pending paths prompt.
+    pub fn simulate_path_prompt_response(
+        &self,
+        select_paths: impl FnOnce(&PathPromptOptions) -> Option<Vec<PathBuf>>,
+    ) {
+        self.test_platform
+            .simulate_path_prompt_response(select_paths)
+    }
+
+    /// Returns a receiver that completes when the platform is asked to
+    /// restart, carrying the restart arguments.
+    pub fn expect_restart(&self) -> oneshot::Receiver<(Option<PathBuf>, Vec<std::ffi::OsString>)> {
+        self.test_platform.expect_restart()
+    }
+
+    /// Whether a restart has been requested through the platform.
+    pub fn did_request_restart(&self) -> bool {
+        !self.test_platform.restarts.borrow().is_empty()
+    }
+
+    /// Open a window handle list. The test platform never creates windows.
+    pub fn windows(&self) -> Vec<AnyWindowHandle> {
+        Vec::new()
     }
 
     /// Returns a stream of notifications whenever the Entity is updated.
     pub fn notifications<T: 'static>(
         &mut self,
         entity: &Entity<T>,
-    ) -> impl Stream<Item = ()> + use<T> {
+    ) -> impl futures::Stream<Item = ()> + use<T> {
         let (tx, rx) = futures::channel::mpsc::unbounded();
         self.update(|cx| {
             cx.observe(entity, {
@@ -580,43 +304,13 @@ impl TestAppContext {
             .detach();
         rx
     }
+}
 
-    /// Runs until the given condition becomes true. (Prefer `run_until_parked` if you
-    /// don't need to jump in at a specific time).
-    pub async fn condition<T: 'static>(
-        &mut self,
-        entity: &Entity<T>,
-        mut predicate: impl FnMut(&mut T, &mut Context<T>) -> bool,
-    ) {
-        let timer = self.executor().timer(Duration::from_secs(3));
-        let mut notifications = self.notifications(entity);
-
-        use futures::FutureExt as _;
-        use futures_concurrency::future::Race as _;
-
-        (
-            async {
-                loop {
-                    if entity.update(self, &mut predicate) {
-                        return Ok(());
-                    }
-
-                    if notifications.next().await.is_none() {
-                        bail!("entity dropped")
-                    }
-                }
-            },
-            timer.map(|_| Err(anyhow!("condition timed out"))),
-        )
-            .race()
-            .await
-            .unwrap();
-    }
-
-    /// Set a name for this App.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn set_name(&mut self, name: &'static str) {
-        self.update(|cx| cx.name = Some(name))
+impl std::fmt::Debug for TestAppContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestAppContext")
+            .field("fn_name", &self.fn_name)
+            .finish()
     }
 }
 
@@ -629,7 +323,7 @@ impl<T: 'static> Entity<T> {
     {
         let (tx, mut rx) = oneshot::channel();
         let mut tx = Some(tx);
-        let subscription = self.update(cx, |_, cx| {
+        let subscription = self.update(cx, |_, cx: &mut Context<T>| {
             cx.subscribe(self, move |_, _, event, _| {
                 if let Some(tx) = tx.take() {
                     _ = tx.send(event.clone());
@@ -642,696 +336,5 @@ impl<T: 'static> Entity<T> {
             drop(subscription);
             event
         }
-    }
-}
-
-impl<V: 'static> Entity<V> {
-    /// Returns a future that resolves when the view is next updated.
-    pub fn next_notification(
-        &self,
-        advance_clock_by: Duration,
-        cx: &TestAppContext,
-    ) -> impl Future<Output = ()> {
-        use postage::prelude::{Sink as _, Stream as _};
-
-        let (mut tx, mut rx) = postage::mpsc::channel(1);
-        let subscription = cx.app.borrow_mut().observe(self, move |_, _| {
-            tx.try_send(()).ok();
-        });
-
-        cx.executor().advance_clock(advance_clock_by);
-
-        async move {
-            rx.recv()
-                .await
-                .expect("entity dropped while test was waiting for its next notification");
-            drop(subscription);
-        }
-    }
-}
-
-impl<V> Entity<V> {
-    /// Returns a future that resolves when the condition becomes true.
-    pub fn condition<Evt>(
-        &self,
-        cx: &TestAppContext,
-        mut predicate: impl FnMut(&V, &App) -> bool,
-    ) -> impl Future<Output = ()>
-    where
-        Evt: 'static,
-        V: EventEmitter<Evt>,
-    {
-        use postage::prelude::{Sink as _, Stream as _};
-
-        let (tx, mut rx) = postage::mpsc::channel(1024);
-
-        let mut cx = cx.app.borrow_mut();
-        let subscriptions = (
-            cx.observe(self, {
-                let mut tx = tx.clone();
-                move |_, _| {
-                    tx.blocking_send(()).ok();
-                }
-            }),
-            cx.subscribe(self, {
-                let mut tx = tx;
-                move |_, _: &Evt, _| {
-                    tx.blocking_send(()).ok();
-                }
-            }),
-        );
-
-        let cx = cx.this.upgrade().unwrap();
-        let handle = self.downgrade();
-
-        async move {
-            loop {
-                {
-                    let cx = cx.borrow();
-                    let cx = &*cx;
-                    if predicate(
-                        handle
-                            .upgrade()
-                            .expect("view dropped with pending condition")
-                            .read(cx),
-                        cx,
-                    ) {
-                        break;
-                    }
-                }
-
-                rx.recv()
-                    .await
-                    .expect("view dropped with pending condition");
-            }
-            drop(subscriptions);
-        }
-    }
-}
-
-use derive_more::{Deref, DerefMut};
-
-use super::{Context, Entity};
-#[derive(Deref, DerefMut, Clone)]
-/// A VisualTestContext is the test-equivalent of a `Window` and `App`. It allows you to
-/// run window-specific test code. It can be dereferenced to a `TextAppContext`.
-pub struct VisualTestContext {
-    #[deref]
-    #[deref_mut]
-    /// cx is the original TestAppContext (you can more easily access this using Deref)
-    pub cx: TestAppContext,
-    window: AnyWindowHandle,
-}
-
-impl VisualTestContext {
-    /// Provides a `Window` and `App` for the duration of the closure.
-    pub fn update<R>(&mut self, f: impl FnOnce(&mut Window, &mut App) -> R) -> R {
-        self.cx
-            .update_window(self.window, |_, window, cx| f(window, cx))
-            .unwrap()
-    }
-
-    /// Creates a new VisualTestContext. You would typically shadow the passed in
-    /// TestAppContext with this, as this is typically more useful.
-    /// `let cx = VisualTestContext::from_window(window, cx);`
-    pub fn from_window(window: AnyWindowHandle, cx: &TestAppContext) -> Self {
-        Self {
-            cx: cx.clone(),
-            window,
-        }
-    }
-
-    /// Wait until there are no more pending tasks.
-    pub fn run_until_parked(&self) {
-        self.cx.background_executor.run_until_parked();
-    }
-
-    /// Dispatch the action to the currently focused node.
-    pub fn dispatch_action<A>(&mut self, action: A)
-    where
-        A: Action,
-    {
-        self.cx.dispatch_action(self.window, action)
-    }
-
-    /// Read the title off the window (set by `Window#set_window_title`)
-    pub fn window_title(&mut self) -> Option<String> {
-        self.cx.test_window(self.window).0.lock().title.clone()
-    }
-
-    /// Read the document path off the window (set by `Window#set_document_path`)
-    pub fn document_path(&mut self) -> Option<std::path::PathBuf> {
-        self.cx
-            .test_window(self.window)
-            .0
-            .lock()
-            .document_path
-            .clone()
-    }
-
-    /// Simulate a sequence of keystrokes `cx.simulate_keystrokes("cmd-p escape")`
-    /// Automatically runs until parked.
-    pub fn simulate_keystrokes(&mut self, keystrokes: &str) {
-        self.cx.simulate_keystrokes(self.window, keystrokes)
-    }
-
-    /// Simulate typing text `cx.simulate_input("hello")`
-    /// Automatically runs until parked.
-    pub fn simulate_input(&mut self, input: &str) {
-        self.cx.simulate_input(self.window, input)
-    }
-
-    /// Simulate a mouse move event to the given point
-    pub fn simulate_mouse_move(
-        &mut self,
-        position: Point<Pixels>,
-        button: impl Into<Option<MouseButton>>,
-        modifiers: Modifiers,
-    ) {
-        self.simulate_event(MouseMoveEvent {
-            position,
-            modifiers,
-            pressed_button: button.into(),
-        })
-    }
-
-    /// Simulate a mouse down event to the given point
-    pub fn simulate_mouse_down(
-        &mut self,
-        position: Point<Pixels>,
-        button: MouseButton,
-        modifiers: Modifiers,
-    ) {
-        self.simulate_event(MouseDownEvent {
-            position,
-            modifiers,
-            button,
-            click_count: 1,
-            first_mouse: false,
-        })
-    }
-
-    /// Simulate a mouse up event to the given point
-    pub fn simulate_mouse_up(
-        &mut self,
-        position: Point<Pixels>,
-        button: MouseButton,
-        modifiers: Modifiers,
-    ) {
-        self.simulate_event(MouseUpEvent {
-            position,
-            modifiers,
-            button,
-            click_count: 1,
-        })
-    }
-
-    /// Simulate a primary mouse click at the given point
-    pub fn simulate_click(&mut self, position: Point<Pixels>, modifiers: Modifiers) {
-        self.simulate_event(MouseDownEvent {
-            position,
-            modifiers,
-            button: MouseButton::Left,
-            click_count: 1,
-            first_mouse: false,
-        });
-        self.simulate_event(MouseUpEvent {
-            position,
-            modifiers,
-            button: MouseButton::Left,
-            click_count: 1,
-        });
-    }
-
-    /// Simulate a modifiers changed event
-    pub fn simulate_modifiers_change(&mut self, modifiers: Modifiers) {
-        self.simulate_event(ModifiersChangedEvent {
-            modifiers,
-            capslock: Capslock { on: false },
-        })
-    }
-
-    /// Simulate a capslock changed event
-    pub fn simulate_capslock_change(&mut self, on: bool) {
-        self.simulate_event(ModifiersChangedEvent {
-            modifiers: Modifiers::none(),
-            capslock: Capslock { on },
-        })
-    }
-
-    /// Simulates the user resizing the window to the new size.
-    pub fn simulate_resize(&self, size: Size<Pixels>) {
-        self.simulate_window_resize(self.window, size)
-    }
-
-    /// debug_bounds returns the bounds of the element with the given selector.
-    pub fn debug_bounds(&mut self, selector: &'static str) -> Option<Bounds<Pixels>> {
-        self.update(|window, _| window.rendered_frame.debug_bounds.get(selector).copied())
-    }
-
-    /// Draw an element to the window. Useful for simulating events or actions
-    pub fn draw<E>(
-        &mut self,
-        origin: Point<Pixels>,
-        space: impl Into<Size<AvailableSpace>>,
-        f: impl FnOnce(&mut Window, &mut App) -> E,
-    ) -> (E::RequestLayoutState, E::PrepaintState)
-    where
-        E: Element,
-    {
-        self.update(|window, cx| {
-            let arena_scope = ElementArenaScope::enter(&cx.element_arena);
-
-            window.invalidator.set_phase(DrawPhase::Prepaint);
-            let mut element = Drawable::new(f(window, cx));
-            element.layout_as_root(space.into(), window, cx);
-            window.with_absolute_element_offset(origin, |window| element.prepaint(window, cx));
-
-            window.invalidator.set_phase(DrawPhase::Paint);
-            let (request_layout_state, prepaint_state) = element.paint(window, cx);
-
-            window.invalidator.set_phase(DrawPhase::None);
-            window.refresh();
-
-            drop(element);
-            arena_scope.exit(&cx.element_arena).clear(cx);
-
-            (request_layout_state, prepaint_state)
-        })
-    }
-
-    /// Simulate an event from the platform, e.g. a ScrollWheelEvent
-    /// Make sure you've called [VisualTestContext::draw] first!
-    pub fn simulate_event<E: InputEvent>(&mut self, event: E) {
-        self.test_window(self.window)
-            .simulate_input(event.to_platform_input());
-        self.background_executor.run_until_parked();
-    }
-
-    /// Simulates the user blurring the window.
-    pub fn deactivate_window(&mut self) {
-        if Some(self.window) == self.test_platform.active_window() {
-            self.test_platform.set_active_window(None)
-        }
-        self.background_executor.run_until_parked();
-    }
-
-    /// Simulates the user closing the window.
-    /// Returns true if the window was closed.
-    pub fn simulate_close(&mut self) -> bool {
-        let handler = self
-            .cx
-            .update_window(self.window, |_, window, _| {
-                window
-                    .platform_window
-                    .as_test()
-                    .unwrap()
-                    .0
-                    .lock()
-                    .should_close_handler
-                    .take()
-            })
-            .unwrap();
-        if let Some(mut handler) = handler {
-            let should_close = handler();
-            self.cx
-                .update_window(self.window, |_, window, _| {
-                    window.platform_window.on_should_close(handler);
-                })
-                .unwrap();
-            should_close
-        } else {
-            false
-        }
-    }
-
-    /// Get an &mut VisualTestContext (which is mostly what you need to pass to other methods).
-    /// This method internally retains the VisualTestContext until the end of the test.
-    pub fn into_mut(self) -> &'static mut Self {
-        let ptr = Box::into_raw(Box::new(self));
-        // safety: on_quit will be called after the test has finished.
-        // the executor will ensure that all tasks related to the test have stopped.
-        // so there is no way for cx to be accessed after on_quit is called.
-        // todo: This is unsound under stacked borrows (also tree borrows probably?)
-        // the mutable reference invalidates `ptr` which is later used in the closure
-        let cx = unsafe { &mut *ptr };
-        cx.on_quit(move || unsafe {
-            drop(Box::from_raw(ptr));
-        });
-        cx
-    }
-}
-
-impl AppContext for VisualTestContext {
-    fn new<T: 'static>(&mut self, build_entity: impl FnOnce(&mut Context<T>) -> T) -> Entity<T> {
-        self.window
-            .update(&mut self.cx, |_, _, cx| cx.new(build_entity))
-            .expect("window was unexpectedly closed")
-    }
-
-    fn reserve_entity<T: 'static>(&mut self) -> crate::Reservation<T> {
-        self.cx.reserve_entity()
-    }
-
-    fn insert_entity<T: 'static>(
-        &mut self,
-        reservation: crate::Reservation<T>,
-        build_entity: impl FnOnce(&mut Context<T>) -> T,
-    ) -> Entity<T> {
-        self.window
-            .update(&mut self.cx, |_, _, cx| {
-                cx.insert_entity(reservation, build_entity)
-            })
-            .expect("window was unexpectedly closed")
-    }
-
-    fn update_entity<T, R>(
-        &mut self,
-        handle: &Entity<T>,
-        update: impl FnOnce(&mut T, &mut Context<T>) -> R,
-    ) -> R
-    where
-        T: 'static,
-    {
-        self.cx.update_entity(handle, update)
-    }
-
-    fn as_mut<'a, T>(&'a mut self, handle: &Entity<T>) -> super::GpuiBorrow<'a, T>
-    where
-        T: 'static,
-    {
-        self.cx.as_mut(handle)
-    }
-
-    fn read_entity<T, R>(&self, handle: &Entity<T>, read: impl FnOnce(&T, &App) -> R) -> R
-    where
-        T: 'static,
-    {
-        self.cx.read_entity(handle, read)
-    }
-
-    fn update_window<T, F>(&mut self, window: AnyWindowHandle, f: F) -> Result<T>
-    where
-        F: FnOnce(AnyView, &mut Window, &mut App) -> T,
-    {
-        self.cx.update_window(window, f)
-    }
-
-    fn with_window<R>(
-        &mut self,
-        entity_id: EntityId,
-        f: impl FnOnce(&mut Window, &mut App) -> R,
-    ) -> Option<R> {
-        self.cx.with_window(entity_id, f)
-    }
-
-    fn read_window<T, R>(
-        &self,
-        window: &WindowHandle<T>,
-        read: impl FnOnce(Entity<T>, &App) -> R,
-    ) -> Result<R>
-    where
-        T: 'static,
-    {
-        self.cx.read_window(window, read)
-    }
-
-    fn background_spawn<R>(&self, future: impl Future<Output = R> + Send + 'static) -> Task<R>
-    where
-        R: Send + 'static,
-    {
-        self.cx.background_spawn(future)
-    }
-
-    fn read_global<G, R>(&self, callback: impl FnOnce(&G, &App) -> R) -> R
-    where
-        G: Global,
-    {
-        self.cx.read_global(callback)
-    }
-}
-
-impl VisualContext for VisualTestContext {
-    type Result<T> = T;
-
-    /// Get the underlying window handle underlying this context.
-    fn window_handle(&self) -> AnyWindowHandle {
-        self.window
-    }
-
-    fn new_window_entity<T: 'static>(
-        &mut self,
-        build_entity: impl FnOnce(&mut Window, &mut Context<T>) -> T,
-    ) -> Entity<T> {
-        self.window
-            .update(&mut self.cx, |_, window, cx| {
-                cx.new(|cx| build_entity(window, cx))
-            })
-            .expect("window was unexpectedly closed")
-    }
-
-    fn update_window_entity<V: 'static, R>(
-        &mut self,
-        view: &Entity<V>,
-        update: impl FnOnce(&mut V, &mut Window, &mut Context<V>) -> R,
-    ) -> R {
-        let view = view.clone();
-        self.cx
-            .app
-            .borrow_mut()
-            .with_window(view.entity_id(), |window, app| {
-                view.update(app, |v, cx| update(v, window, cx))
-            })
-            .expect("entity has no current window; use `update` instead of `update_in`")
-    }
-
-    fn replace_root_view<V>(
-        &mut self,
-        build_view: impl FnOnce(&mut Window, &mut Context<V>) -> V,
-    ) -> Entity<V>
-    where
-        V: 'static + Render,
-    {
-        self.window
-            .update(&mut self.cx, |_, window, cx| {
-                window.replace_root(cx, build_view)
-            })
-            .expect("window was unexpectedly closed")
-    }
-
-    fn focus<V: crate::Focusable>(&mut self, view: &Entity<V>) {
-        self.window
-            .update(&mut self.cx, |_, window, cx| {
-                view.read(cx).focus_handle(cx).focus(window, cx)
-            })
-            .expect("window was unexpectedly closed")
-    }
-}
-
-impl AnyWindowHandle {
-    /// Creates the given view in this window.
-    pub fn build_entity<V: Render + 'static>(
-        &self,
-        cx: &mut TestAppContext,
-        build_view: impl FnOnce(&mut Window, &mut Context<V>) -> V,
-    ) -> Entity<V> {
-        self.update(cx, |_, window, cx| cx.new(|cx| build_view(window, cx)))
-            .unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        PathPromptOptions, SystemNotification, SystemNotificationAction,
-        SystemNotificationResponse, TestAppContext,
-    };
-    use std::cell::RefCell;
-    use std::path::PathBuf;
-    use std::rc::Rc;
-
-    #[gpui::test]
-    async fn test_system_notifications_require_identity_and_replace_matching_tags(
-        cx: &mut TestAppContext,
-    ) {
-        cx.update(|cx| {
-            cx.show_system_notification(SystemNotification {
-                tag: "thread-1".into(),
-                title: "Task started".into(),
-                body: "Running tests".into(),
-                actions: Vec::new(),
-            });
-        });
-        assert!(cx.shown_system_notifications().is_empty());
-        assert!(cx.delivered_system_notifications().is_empty());
-
-        cx.update(|cx| {
-            cx.set_app_identity("com.example.tasks", "Tasks");
-            cx.show_system_notification(SystemNotification {
-                tag: "thread-1".into(),
-                title: "Task started".into(),
-                body: "Running tests".into(),
-                actions: Vec::new(),
-            });
-            cx.show_system_notification(SystemNotification {
-                tag: "thread-1".into(),
-                title: "Task finished".into(),
-                body: "All tests passed".into(),
-                actions: vec![SystemNotificationAction {
-                    id: "open".into(),
-                    label: "Open".into(),
-                }],
-            });
-        });
-
-        assert_eq!(
-            cx.app_identity(),
-            Some(("com.example.tasks".into(), "Tasks".into()))
-        );
-        assert_eq!(cx.shown_system_notifications().len(), 2);
-        assert_eq!(
-            cx.delivered_system_notifications(),
-            [SystemNotification {
-                tag: "thread-1".into(),
-                title: "Task finished".into(),
-                body: "All tests passed".into(),
-                actions: vec![SystemNotificationAction {
-                    id: "open".into(),
-                    label: "Open".into(),
-                }],
-            }]
-        );
-
-        cx.update(|cx| cx.dismiss_system_notification("thread-1"));
-        assert!(cx.delivered_system_notifications().is_empty());
-        assert_eq!(cx.dismissed_system_notifications(), ["thread-1"]);
-    }
-
-    #[gpui::test]
-    async fn test_system_notification_body_and_action_responses(cx: &mut TestAppContext) {
-        let responses = Rc::new(RefCell::new(Vec::new()));
-        cx.update(|cx| {
-            cx.on_system_notification_response({
-                let responses = responses.clone();
-                move |response, _cx| responses.borrow_mut().push(response)
-            });
-        });
-
-        cx.simulate_system_notification_response(SystemNotificationResponse {
-            tag: "thread-1".into(),
-            action_id: None,
-        });
-        cx.simulate_system_notification_response(SystemNotificationResponse {
-            tag: "thread-1".into(),
-            action_id: Some("default".into()),
-        });
-
-        assert_eq!(
-            responses.borrow().as_slice(),
-            &[
-                SystemNotificationResponse {
-                    tag: "thread-1".into(),
-                    action_id: None,
-                },
-                SystemNotificationResponse {
-                    tag: "thread-1".into(),
-                    action_id: Some("default".into()),
-                },
-            ]
-        );
-    }
-
-    #[gpui::test]
-    async fn test_system_notification_response_handler_can_be_replaced(cx: &mut TestAppContext) {
-        let first_responses = Rc::new(RefCell::new(Vec::new()));
-        let second_responses = Rc::new(RefCell::new(Vec::new()));
-        cx.update(|cx| {
-            cx.on_system_notification_response({
-                let first_responses = first_responses.clone();
-                move |response, _cx| first_responses.borrow_mut().push(response)
-            });
-            cx.on_system_notification_response({
-                let second_responses = second_responses.clone();
-                move |response, _cx| second_responses.borrow_mut().push(response)
-            });
-        });
-
-        let response = SystemNotificationResponse {
-            tag: "thread-1".into(),
-            action_id: None,
-        };
-        cx.simulate_system_notification_response(response.clone());
-
-        assert!(first_responses.borrow().is_empty());
-        assert_eq!(second_responses.borrow().as_slice(), &[response]);
-    }
-
-    #[gpui::test]
-    async fn test_system_notification_response_handler_can_reenter_app(cx: &mut TestAppContext) {
-        cx.update(|cx| {
-            cx.set_app_identity("com.example.tasks", "Tasks");
-            cx.show_system_notification(SystemNotification {
-                tag: "thread-1".into(),
-                title: "Task finished".into(),
-                body: "All tests passed".into(),
-                actions: Vec::new(),
-            });
-            cx.on_system_notification_response(|response, cx| {
-                cx.dismiss_system_notification(&response.tag);
-            });
-        });
-
-        cx.simulate_system_notification_response(SystemNotificationResponse {
-            tag: "thread-1".into(),
-            action_id: None,
-        });
-
-        assert!(cx.delivered_system_notifications().is_empty());
-        assert_eq!(cx.dismissed_system_notifications(), ["thread-1"]);
-    }
-
-    #[gpui::test]
-    async fn test_simulate_path_prompt_response(cx: &mut TestAppContext) {
-        assert!(!cx.did_prompt_for_paths());
-
-        let receiver = cx.update(|cx| {
-            cx.prompt_for_paths(PathPromptOptions {
-                files: false,
-                directories: true,
-                multiple: true,
-                prompt: None,
-            })
-        });
-        assert!(cx.did_prompt_for_paths());
-
-        let selected = vec![PathBuf::from("/a"), PathBuf::from("/b")];
-        cx.simulate_path_prompt_response({
-            let selected = selected.clone();
-            move |options| {
-                assert!(options.multiple);
-                Some(selected)
-            }
-        });
-        assert!(!cx.did_prompt_for_paths());
-
-        let response = receiver.await.unwrap().unwrap();
-        assert_eq!(response, Some(selected));
-    }
-
-    #[gpui::test]
-    async fn test_simulate_path_prompt_cancellation(cx: &mut TestAppContext) {
-        let receiver = cx.update(|cx| {
-            cx.prompt_for_paths(PathPromptOptions {
-                files: true,
-                directories: false,
-                multiple: false,
-                prompt: None,
-            })
-        });
-
-        cx.simulate_path_prompt_response(|_options| None);
-
-        let response = receiver.await.unwrap().unwrap();
-        assert_eq!(response, None);
     }
 }

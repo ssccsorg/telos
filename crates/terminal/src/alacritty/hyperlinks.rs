@@ -1140,7 +1140,7 @@ mod tests {
 
         mod perf {
             use super::super::*;
-            use crate::TerminalSettings;
+            use crate::terminal_settings::TerminalSettings;
             use alacritty_terminal::{
                 event::VoidListener,
                 grid::Scroll,

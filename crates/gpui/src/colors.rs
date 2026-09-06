@@ -1,4 +1,6 @@
-use crate::{App, Global, Rgba, Window, WindowAppearance, rgb};
+use crate::{App, Global, Rgba, WindowAppearance, rgb};
+#[cfg(feature = "ui")]
+use crate::Window;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -33,6 +35,7 @@ impl Default for Colors {
 
 impl Colors {
     /// Returns the default colors for the given window appearance.
+    #[cfg(feature = "ui")]
     pub fn for_appearance(window: &Window) -> Self {
         match window.appearance() {
             WindowAppearance::Light | WindowAppearance::VibrantLight => Self::light(),

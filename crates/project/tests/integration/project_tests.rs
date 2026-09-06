@@ -16408,9 +16408,8 @@ async fn test_initial_scan_complete(cx: &mut gpui::TestAppContext) {
     let _observe = {
         let repos_created = repos_created.clone();
         cx.update(|cx| {
-            cx.observe_new::<Repository>(move |repo, _, cx| {
+            cx.observe_new::<Repository>(move |_repo, cx| {
                 repos_created.borrow_mut().push(cx.entity().downgrade());
-                let _ = repo;
             })
         })
     };

@@ -12,7 +12,7 @@ pub fn intercept_debug_sessions<T: Fn(&Arc<DebugAdapterClient>) + 'static>(
 ) -> Subscription {
     cx.update(|cx| {
         let configure = Arc::new(configure);
-        cx.observe_new::<Session>(move |_, _, cx| {
+        cx.observe_new::<Session>(move |_, cx| {
             let configure = configure.clone();
             cx.subscribe_self(move |session, event, cx| {
                 let configure = configure.clone();

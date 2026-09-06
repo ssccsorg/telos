@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use collections::{HashMap, TypeIdHashMap};
 pub use gpui_macros::Action;
 pub use no_action::{NoAction, Unbind, is_no_action, is_unbind};
@@ -333,14 +333,6 @@ impl ActionRegistry {
     }
 
     /// Construct an action based on its name and optional JSON parameters sourced from the keymap.
-    pub fn build_action_type(&self, type_id: &TypeId) -> Result<Box<dyn Action>> {
-        let name = self
-            .names_by_type_id
-            .get(type_id)
-            .with_context(|| format!("no action type registered for {type_id:?}"))?;
-
-        Ok(self.build_action(name, None)?)
-    }
 
     #[cfg(feature = "profiler")]
     pub(crate) fn try_resolve_action(&self, type_id: &TypeId) -> Option<&'static str> {

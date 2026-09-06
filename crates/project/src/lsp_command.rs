@@ -14,7 +14,7 @@ use client::proto::{self, PeerId};
 use clock::Global;
 use collections::HashMap;
 use futures::future;
-use gpui::{App, AsyncApp, Entity, SharedString, Task, TaskExt, prelude::FluentBuilder};
+use gpui::{App, AsyncApp, Entity, SharedString, Task, TaskExt};
 use language::{
     Anchor, Bias, Buffer, BufferSnapshot, CachedLspAdapter, CharKind, CharScopeContext,
     OffsetRangeExt, PointUtf16, SymbolKind, ToOffset, ToPointUtf16, Transaction, Unclipped,
@@ -4650,7 +4650,7 @@ impl LspCommand for SemanticTokensDelta {
             text_document: lsp::TextDocumentIdentifier {
                 uri: file_path_to_lsp_url(path)?,
             },
-            previous_result_id: self.previous_result_id.clone().map(|s| s.to_string()),
+            previous_result_id: self.previous_result_id.to_string(),
             partial_result_params: Default::default(),
             work_done_progress_params: Default::default(),
         })

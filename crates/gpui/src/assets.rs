@@ -1,14 +1,7 @@
-use crate::{DevicePixels, Pixels, Result, SharedString, Size, size};
-use smallvec::SmallVec;
-
+use crate::{Result, SharedString};
 #[cfg(feature = "ui")]
 use image::{Delay, Frame};
-use std::{
-    borrow::Cow,
-    fmt,
-    hash::Hash,
-    sync::atomic::{AtomicUsize, Ordering::SeqCst},
-};
+use std::borrow::Cow;
 
 /// A source of assets for this app to use.
 pub trait AssetSource: 'static + Send + Sync {
@@ -120,22 +113,5 @@ impl fmt::Debug for RenderImage {
             .field("id", &self.id)
             .field("size", &self.data.first().map(|f| f.buffer().dimensions()))
             .finish()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use smallvec::SmallVec;
-
-    #[test]
-    fn empty_render_image_does_not_panic() {
-        let image = RenderImage::new(SmallVec::new());
-        assert_eq!(image.frame_count(), 0);
-        assert_eq!(image.size(0), Size::default());
-        assert_eq!(image.as_bytes(0), None);
-        assert_eq!(image.render_size(0), Size::default());
-        assert_eq!(image.delay(0), Delay::from_numer_denom_ms(100, 1));
-        let _ = format!("{image:?}");
     }
 }

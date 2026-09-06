@@ -3,8 +3,10 @@
 //! application to avoid having to import each trait individually.
 
 pub use crate::{
-    AppContext as _, BorrowAppContext, Context, Element, InteractiveElement, IntoElement,
-    ParentElement, Refineable, Render, RenderOnce, StatefulInteractiveElement, Styled, TaskExt as _, VisualContext, util::FluentBuilder,
+    AppContext as _, BorrowAppContext, Context, IntoElement, Refineable, Render, TaskExt as _,
+    util::FluentBuilder,
 };
+#[cfg(feature = "ui")]
+pub use crate::VisualContext;
 #[cfg(feature = "ui")]
 pub use crate::StyledImage;

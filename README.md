@@ -1,26 +1,43 @@
 # Telos
 
-General agent execution layer of the SSCCS stack. Actus plans, Telos
-executes: it receives commands from actus and converts them into system
-calls, tool invocations, and protocol traffic over files, processes, and
-networks.
+A general agent that runs as a fleet of peers with coordinate teleport.
 
-The working thesis is that an agent does not need to traverse trees to act.
-Work is addressed by coordinate and reached by teleport: no path walks, no
-directory descent, no sequential scans. The agent moves between work
-locations in space, and the execution layer materializes that movement as
-concrete system effects.
+Telos is the headless execution layer, built on
+Zed's agent machinery with the telos concept fused on top. It receives
+commands from actus and converts them into system calls, tool
+invocations, and protocol traffic over files, processes, and networks.
+The working thesis is that an agent does not need to traverse trees to
+act: work is addressed by coordinate and reached by teleport, with no
+path walks, no directory descent, no sequential scans. The agent moves
+between work locations in space, and the execution layer materializes
+that movement as concrete system effects.
 
-The final interface is a contract, kept 1:1 with actus. The bootstrap
-starts at the boundary: a mock agent emits the exact event sequences actus
-depends on, the conformance suite gates every change, and the internals are
-filled in behind that stable surface.
+The final interface is a contract kept 1:1 with actus. The bootstrap
+started at the boundary: a mock agent emits the exact event sequences
+actus depends on, the conformance suite gates every change, and the
+internals were filled in behind that stable surface. The headless agent
+core now runs end to end over a WebSocket contract with a stub backend
+for deterministic, LLM-free conformance runs.
 
-Status: bootstrap. The single binary (`crates/telos`) wires the agent
-core end to end: an LLM backend (OpenAI-compatible, deepseek default)
-with a tool registry and a tool-call loop. Without an API key the loop
-falls back to a deterministic fake backend, so the actus chat flow works
-with this binary attached either way.
+## Headless runtime
+
+The single binary (`crates/telos`, built as `tel`) wires gpui as a
+headless application and entity runtime: no editor, workspace, windowing,
+or rendering code exists in the build graph. The UI layer of the absorbed
+Zed core was removed, and the remaining runtime is covered by unit tests
+on a window-free harness (`TestDispatcher`/`TestPlatform`/`TestAppContext`)
+that keeps the reactive entity, executor, and session machinery
+deterministic.
+
+Suites green on the headless harness: gpui 90, agent 733, acp_thread 124,
+context_server 97, agent_servers 31, terminal 86, plus project unit and
+context-server-store coverage.
+
+The agent honors the actus launch contract: `--user-data-dir` pins the
+settings and credentials root before settings init, so actus-injected
+LLM configuration and `context_servers` MCP entries load into the
+process. MCP tool exposure is profile-gated and covered by the agent MCP
+tests.
 
 ## Position in the stack
 
@@ -32,10 +49,29 @@ with this binary attached either way.
 | Intelligence | Actus | planning with the LLM, domain knowledge |
 | Execution | Telos | command intake, system call conversion, ACP/MCP execution |
 
+## Distribution
+
+A prebuilt agent image is published to `ghcr.io/ssccsorg/telos` on main
+pushes and version tags (`latest`, `main`, and tag-named tags). Downstream
+CI (actus) pulls the image and runs its real-agent conformance tier
+against the binary at the stable image path
+`/workspace/target/telos-release/tel`, so consumers never rebuild the
+telos workspace. The stripped release binary is about 46 MiB; an
+unstripped debug build is around 279 MB.
+
+The build disables `language_models/extension-support`, so wasm extension
+hosted LLM providers and the wasmtime/cranelift chain they drag in are
+compiled out; only the built-in anthropic, open_ai, and deepseek providers
+stay. The Zed sample extension tree and its benchmark were removed; the
+runtime keeps the extension crate for user-installed stores but ships no
+sample extensions.
+
 ## Layout
 
 - `crates/telos`: the single binary over the agent core (wire types,
   agent loop, and the `tel` entrypoint in one crate)
+- `crates/gpui`: headless application and entity runtime (UI layer
+  removed; README inside the crate describes the runtime shape)
 - `VENDORING.md`: zed sync and derivation record; insight-mapping port
   procedure with the pinned base commit and current divergences
 - `docs/upstream-sync.md`: upstream knowledge synchronization process
@@ -47,19 +83,14 @@ Build telos and attach it to actus:
 
 ```sh
 cargo build --profile telos-release -p telos
+# from the actus checkout:
 TELOS_BIN=/path/to/this/repo/target/telos-release/tel LLM_API_KEY=dummy ./run.sh --test
 ```
 
-The binary (`crates/telos`, built as `tel`) wires the agent core directly
-(gpui headless + project + native agent + external websocket sync) without
-the editor, workspace, agent_ui, or collab UI stack. It speaks the actus
-WebSocket contract: connect, agent_ready, chat, tools, completion.
-
-The build disables `language_models/extension-support`, so wasm extension
-hosted LLM providers (and the wasmtime/cranelift chain they drag in) are
-compiled out; only the built-in anthropic, open_ai, and deepseek providers
-stay. Re-enable the feature in the workspace root if extension providers
-are ever needed.
+The binary speaks the actus WebSocket contract: connect, agent_ready,
+chat, tools, completion. With `TELOS_STUB_BACKEND=1` the agent responds
+with a fixed deterministic backend, so contract runs need no LLM key and
+no model variance.
 
 The repository is private. When distributed, telos is licensed under
 GPL-3.0-or-later; see the License section below.

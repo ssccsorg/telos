@@ -8,7 +8,6 @@ pub mod terminal_settings;
 use anyhow::Context as _;
 use anyhow::{Result, bail};
 use futures_lite::future::yield_now;
-use log::trace;
 
 use futures::{
     FutureExt,
@@ -17,7 +16,7 @@ use futures::{
 
 use alacritty_terminal::grid::Dimensions as _;
 use itertools::Itertools as _;
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
 use mappings::mouse::{
     alt_scroll, grid_point, grid_point_and_side, mouse_button_report, mouse_moved_report,
     scroll_report,
@@ -30,9 +29,8 @@ use pty_info::{ProcessIdGetter, PtyProcessInfo};
 use serde::{Deserialize, Serialize};
 use settings::Settings;
 use task::{HideStrategy, Shell, ShellKind, SpawnInTerminal};
-use terminal_settings::{AlternateScroll, CursorShape as SettingsCursorShape, TerminalSettings};
+use terminal_settings::{AlternateScroll, CursorShape as SettingsCursorShape};
 use theme::{ActiveTheme, Theme};
-use urlencoding;
 use util::{ResultExt as _, paths::PathStyle, truncate_and_trailoff};
 
 #[cfg(unix)]
@@ -56,24 +54,19 @@ pub use vte::ansi::{Color, NamedColor, Rgb};
 
 use gpui::{
     App, AppContext as _, BackgroundExecutor, Bounds, ClipboardItem, Context, EventEmitter, Hsla,
-    Keystroke, Modifiers, Pixels, Point as GpuiPoint, Rgba, Size, Task, actions, black, px,
+    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, actions, black, px,
 };
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
 use gpui::{MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollWheelEvent, TouchPhase, Window};
 
 #[cfg(not(windows))]
 use crate::alacritty::current_child_signal_mask;
 use crate::alacritty::{
-    AlacrittyCell, AlacrittyGridIterator, AlacrittyHyperlink, AlacrittySearch, AlacrittyTerm,
+    AlacrittyCell, AlacrittyGridIterator, AlacrittyHyperlink, AlacrittySearch,
     AlacrittyTermConfig, AlacrittyTermLock, HyperlinkMatch, PtySender, RegexSearches,
-    append_text_to_term, apply_config, clear_saved_screen, content_text, display_offset,
-    display_only_term_config, find_from_terminal_point, full_content_range, last_non_empty_lines,
-    make_content, new_term, open_pty, pty_options, pty_term_config, resize, screen_lines,
-    scroll_display, scroll_to_point, search_matches, selection_text, set_default_cursor_style,
-    set_selection as set_term_selection, shrink_to_used, spawn_event_loop,
-    toggle_vi_mode as toggle_term_vi_mode, total_lines, update_selection as update_term_selection,
-    update_selection_to_vi_cursor, update_vi_cursor_for_scroll, used_lines, vi_goto_point,
-    vi_motion,
+    append_text_to_term, apply_config, clear_saved_screen, content_text,
+    display_only_term_config, full_content_range, last_non_empty_lines,
+    make_content, new_term, open_pty, pty_options, pty_term_config, screen_lines, search_matches, set_default_cursor_style, shrink_to_used, spawn_event_loop, total_lines, used_lines,
 };
 use crate::mappings::colors::to_vte_rgb;
 use crate::mappings::keys::to_esc_str;
@@ -1705,7 +1698,7 @@ impl Terminal {
         self.selection_phase == SelectionPhase::Selecting
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn process_terminal_event(
         &mut self,
         event: &InternalEvent,
@@ -1862,7 +1855,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn process_hyperlink(
         &mut self,
         hyperlink: HyperlinkMatch,
@@ -1906,14 +1899,14 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn clear_hyperlink(&mut self, cx: &mut Context<Self>) {
         if self.last_content.last_hovered_word.take().is_some() {
             cx.emit(Event::NewNavigationTarget(None));
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn find_hyperlink_at_point(&mut self, point: Point) -> Option<HyperlinkMatch> {
         let term_lock = self.term.lock();
         find_from_terminal_point(
@@ -1924,7 +1917,7 @@ impl Terminal {
         )
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn update_selected_word(
         &mut self,
         prev_word: Option<HoveredWord>,
@@ -1950,7 +1943,7 @@ impl Terminal {
         cx.notify()
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn next_link_id(&mut self) -> usize {
         let res = self.next_link_id;
         self.next_link_id = self.next_link_id.wrapping_add(1);
@@ -2396,7 +2389,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn try_modifiers_change(
         &mut self,
         modifiers: &Modifiers,
@@ -2417,7 +2410,7 @@ impl Terminal {
         self.input(paste_text.into_bytes());
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let term = self.term.clone();
         let mut terminal = term.lock_unfair();
@@ -2467,7 +2460,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn mouse_changed(&mut self, point: Point, side: SelectionSide) -> bool {
         match self.last_mouse {
             Some((old_point, old_side)) => {
@@ -2489,7 +2482,7 @@ impl Terminal {
         self.last_content.mode.intersects(Modes::MOUSE_MODE) && !shift
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<Self>) {
         let position = e.position - self.last_content.terminal_bounds.bounds.origin;
         if self.mouse_mode(e.modifiers.shift) {
@@ -2525,7 +2518,7 @@ impl Terminal {
         cx.notify();
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn schedule_find_hyperlink(
         &mut self,
         modifiers: Modifiers,
@@ -2575,7 +2568,7 @@ impl Terminal {
         cx.notify();
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn select_word_at_event_position(&mut self, e: &MouseDownEvent) {
         let position = e.position - self.last_content.terminal_bounds.bounds.origin;
         let (point, side) = grid_point_and_side(
@@ -2588,7 +2581,7 @@ impl Terminal {
             .push_back(InternalEvent::SetSelection(Some(selection)));
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_drag(
         &mut self,
         e: &MouseMoveEvent,
@@ -2642,7 +2635,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn drag_line_delta(&self, e: &MouseMoveEvent, region: Bounds<Pixels>) -> Option<i32> {
         let top = region.origin.y;
         let bottom = region.bottom_left().y;
@@ -2660,7 +2653,7 @@ impl Terminal {
         Some(scroll_lines.clamp(-3, 3))
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_down(&mut self, e: &MouseDownEvent, cx: &mut Context<Self>) {
         let position = e.position - self.last_content.terminal_bounds.bounds.origin;
         let point = grid_point(
@@ -2742,7 +2735,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_up(&mut self, e: &MouseUpEvent, cx: &Context<Self>) {
         let setting = TerminalSettings::get_global(cx);
 
@@ -2816,7 +2809,7 @@ impl Terminal {
     }
 
     ///Scroll the terminal
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn scroll_wheel(&mut self, e: &ScrollWheelEvent, scroll_multiplier: f32) {
         let mouse_mode = self.mouse_mode(e.shift);
         let scroll_multiplier = if mouse_mode { 1. } else { scroll_multiplier };
@@ -2851,12 +2844,12 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn refresh_hovered_word(&mut self, window: &Window, cx: &mut Context<Self>) {
         self.schedule_find_hyperlink(window.modifiers(), window.mouse_position(), cx);
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn determine_scroll_lines(
         &mut self,
         e: &ScrollWheelEvent,
@@ -3593,7 +3586,7 @@ mod tests {
     };
     use collections::HashMap;
     use gpui::{
-        ClipboardItem, Entity, Pixels, TestAppContext, VisualTestContext, bounds, point, size,
+        ClipboardItem, Entity, Pixels, TestAppContext, bounds, point, size,
     };
     use parking_lot::Mutex;
     use rand::{Rng, distr, rngs::StdRng};
@@ -3897,237 +3890,6 @@ mod tests {
         terminal
     }
 
-    fn init_terminal_test_with_window<'a>(
-        cx: &'a mut TestAppContext,
-        initial_content: &[u8],
-    ) -> (Entity<Terminal>, &'a mut VisualTestContext) {
-        cx.update(|cx| {
-            let settings_store = settings::SettingsStore::test(cx);
-            cx.set_global(settings_store);
-        });
-
-        cx.executor().allow_parking();
-
-        let window = cx.add_empty_window();
-        let builder = window.update(|window, cx| {
-            TerminalBuilder::new_display_only(
-                SettingsCursorShape::default(),
-                AlternateScroll::On,
-                None,
-                window.window_handle().window_id().as_u64(),
-                cx.background_executor(),
-                PathStyle::local(),
-            )
-        });
-        let terminal = window.new(|cx| builder.subscribe(cx));
-
-        terminal.update(window, |term, cx| {
-            term.write_output(initial_content, cx);
-        });
-
-        (terminal, window)
-    }
-
-    fn left_mouse_down_at(
-        terminal: &mut Terminal,
-        position: GpuiPoint<Pixels>,
-        cx: &mut Context<Terminal>,
-    ) {
-        let mouse_down = MouseDownEvent {
-            button: MouseButton::Left,
-            position,
-            modifiers: Modifiers::none(),
-            click_count: 1,
-            first_mouse: true,
-        };
-        terminal.mouse_down(&mouse_down, cx);
-    }
-
-    fn left_mouse_up_at(
-        terminal: &mut Terminal,
-        position: GpuiPoint<Pixels>,
-        cx: &mut Context<Terminal>,
-    ) {
-        let mouse_up = MouseUpEvent {
-            button: MouseButton::Left,
-            position,
-            modifiers: Modifiers::none(),
-            click_count: 1,
-        };
-        terminal.mouse_up(&mouse_up, cx);
-    }
-
-    fn left_mouse_drag_to(
-        terminal: &mut Terminal,
-        position: GpuiPoint<Pixels>,
-        cx: &mut Context<Terminal>,
-    ) {
-        let region = terminal.last_content.terminal_bounds.bounds;
-        let drag_event = MouseMoveEvent {
-            position,
-            pressed_button: Some(MouseButton::Left),
-            modifiers: Modifiers::none(),
-        };
-        terminal.mouse_drag(&drag_event, region, cx);
-    }
-
-    /// A left click that jitters by a pixel or two (e.g. the window-focusing
-    /// click) must not begin a selection, otherwise `copy_on_select` would
-    /// overwrite the clipboard. Regression test for #58970.
-    #[gpui::test]
-    async fn test_terminal_click_jitter_does_not_start_selection(cx: &mut TestAppContext) {
-        let terminal = init_terminal_test(cx, b"hello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            left_mouse_down_at(terminal, point(px(50.0), px(10.0)), cx);
-            terminal.events.clear();
-
-            // One pixel of movement is below the drag threshold.
-            left_mouse_drag_to(terminal, point(px(51.0), px(10.0)), cx);
-
-            assert!(
-                !terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "a sub-threshold click jitter should not start a selection"
-            );
-            assert!(terminal.selection_phase == SelectionPhase::Ended);
-        });
-    }
-
-    /// A deliberate drag past the threshold must still start a selection.
-    #[gpui::test]
-    async fn test_terminal_deliberate_drag_starts_selection(cx: &mut TestAppContext) {
-        let terminal = init_terminal_test(cx, b"hello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            left_mouse_down_at(terminal, point(px(50.0), px(10.0)), cx);
-            terminal.events.clear();
-
-            // Well beyond the drag threshold.
-            left_mouse_drag_to(terminal, point(px(90.0), px(10.0)), cx);
-
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "a deliberate drag should start a selection"
-            );
-            assert!(terminal.selection_phase == SelectionPhase::Selecting);
-        });
-    }
-
-    /// With mouse tracking active (e.g. htop), Shift is the escape hatch to
-    /// select terminal text. Shift+drag must start a selection rather than being
-    /// swallowed as a "extend existing selection" no-op. Regression test for #60254.
-    #[gpui::test]
-    async fn test_terminal_shift_drag_selects_while_mouse_tracking(cx: &mut TestAppContext) {
-        // `?1002h` enables button-event mouse tracking, `?1006h` selects SGR encoding.
-        let terminal = init_terminal_test(cx, b"\x1b[?1002h\x1b[?1006hhello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            assert!(
-                terminal.last_content.mode.intersects(Modes::MOUSE_MODE),
-                "mouse tracking should be active"
-            );
-
-            let shift = Modifiers {
-                shift: true,
-                ..Modifiers::none()
-            };
-            terminal.mouse_down(
-                &MouseDownEvent {
-                    button: MouseButton::Left,
-                    position: point(px(50.0), px(10.0)),
-                    modifiers: shift,
-                    click_count: 1,
-                    first_mouse: true,
-                },
-                cx,
-            );
-
-            // With no selection yet, the shift press must anchor a new selection
-            // so the following drag has something to extend.
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::SetSelection(Some(_)))),
-                "shift+click with no existing selection should anchor a selection"
-            );
-            terminal.events.clear();
-
-            let region = terminal.last_content.terminal_bounds.bounds;
-            terminal.mouse_drag(
-                &MouseMoveEvent {
-                    position: point(px(90.0), px(10.0)),
-                    pressed_button: Some(MouseButton::Left),
-                    modifiers: shift,
-                },
-                region,
-                cx,
-            );
-
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "shift+drag should extend the selection while mouse tracking is active"
-            );
-            assert!(terminal.selection_phase == SelectionPhase::Selecting);
-        });
-    }
-
-    /// Shift+click with a selection already on screen must keep extending it
-    /// (the behavior added in #25143), not re-anchor a fresh one.
-    #[gpui::test]
-    async fn test_terminal_shift_click_extends_existing_selection(cx: &mut TestAppContext) {
-        let terminal = init_terminal_test(cx, b"hello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            // A visible selection, as a sync would have populated in production.
-            terminal.last_content.selection = Some(SelectionRange {
-                start: Point::new(0, 0),
-                end: Point::new(0, 5),
-                is_block: false,
-            });
-            terminal.events.clear();
-
-            terminal.mouse_down(
-                &MouseDownEvent {
-                    button: MouseButton::Left,
-                    position: point(px(90.0), px(10.0)),
-                    modifiers: Modifiers {
-                        shift: true,
-                        ..Modifiers::none()
-                    },
-                    click_count: 1,
-                    first_mouse: true,
-                },
-                cx,
-            );
-
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "shift+click with an existing selection should extend it"
-            );
-            assert!(
-                !terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::SetSelection(Some(_)))),
-                "shift+click should extend, not re-anchor, an existing selection"
-            );
-        });
-    }
-
-    #[gpui::test]
     async fn test_basic_terminal(cx: &mut TestAppContext) {
         cx.executor().allow_parking();
 
@@ -4810,6 +4572,7 @@ mod tests {
         assert_eq!(clipboard_text.as_deref(), Some("original"));
     }
 
+    #[cfg(feature = "ui")]
     mod hyperlinks {
         use super::{
             init_terminal_test, init_terminal_test_with_window, left_mouse_down_at,
@@ -5699,6 +5462,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "ui")]
     mod perf {
         use super::{super::*, init_terminal_test_with_window};
         use gpui::{ScrollDelta, ScrollWheelEvent, TestAppContext, VisualContext, point};

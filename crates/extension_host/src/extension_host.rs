@@ -339,7 +339,7 @@ pub fn init(
 
     cx.set_global(GlobalExtensionStore(store));
 
-    cx.observe_new::<Project>(|project, _window, cx| {
+    cx.observe_new::<Project>(|project, cx| {
         let Some(client) = project.remote_client() else {
             return;
         };

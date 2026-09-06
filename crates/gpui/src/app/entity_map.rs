@@ -1,4 +1,4 @@
-use crate::{App, AppContext, GpuiBorrow, VisualContext, Window, seal::Sealed};
+use crate::{App, AppContext, GpuiBorrow, seal::Sealed};
 use anyhow::{Context as _, Result};
 use collections::FxHashSet;
 use derive_more::{Deref, DerefMut};
@@ -171,15 +171,7 @@ impl EntityMap {
         );
     }
 
-    pub fn extend_accessed(&mut self, entities: &FxHashSet<EntityId>) {
-        self.accessed_entities
-            .get_mut()
-            .extend(entities.iter().copied());
-    }
 
-    pub fn clear_accessed(&mut self) {
-        self.accessed_entities.get_mut().clear();
-    }
 
     pub fn take_dropped(&mut self) -> Vec<(EntityId, Box<dyn Any>)> {
         let mut ref_counts = &mut *self.ref_counts.write();
@@ -488,23 +480,12 @@ impl<T: 'static> Entity<T> {
     }
 
     /// Updates the entity referenced by this handle with the given function.
+    #[inline]
     pub fn write<C: AppContext>(&self, cx: &mut C, value: T) {
         self.update(cx, |entity, cx| {
             *entity = value;
             cx.notify();
         })
-    }
-
-    /// Updates the entity referenced by this handle with the given function if
-    /// the referenced entity still exists, within a visual context that has a window.
-    /// Returns an error if the window has been closed.
-    #[inline]
-    pub fn update_in<R, C: VisualContext>(
-        &self,
-        cx: &mut C,
-        update: impl FnOnce(&mut T, &mut Window, &mut Context<T>) -> R,
-    ) -> C::Result<R> {
-        cx.update_window_entity(self, update)
     }
 }
 
@@ -784,24 +765,6 @@ impl<T: 'static> WeakEntity<T> {
     {
         let entity = self.upgrade().context("entity released")?;
         Ok(cx.update_entity(&entity, update))
-    }
-
-    /// Updates the entity referenced by this handle with the given function if
-    /// the referenced entity still exists, within a visual context that has a window.
-    /// Returns an error if the entity has been released.
-    pub fn update_in<C, R>(
-        &self,
-        cx: &mut C,
-        update: impl FnOnce(&mut T, &mut Window, &mut Context<T>) -> R,
-    ) -> Result<R>
-    where
-        C: AppContext,
-    {
-        let entity = self.upgrade().context("entity released")?;
-        cx.with_window(entity.entity_id(), |window, app| {
-            entity.update(app, |entity, cx| update(entity, window, cx))
-        })
-        .context("entity has no current window")
     }
 
     /// Reads the entity referenced by this handle with the given function if

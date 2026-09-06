@@ -14,25 +14,18 @@ mod app;
 mod arena;
 mod asset_cache;
 mod assets;
-mod bounds_tree;
 mod color;
 /// The default colors used by GPUI.
 pub mod colors;
-#[cfg(feature = "profiler")]
-mod debug_overlay;
-mod element;
-mod elements;
 mod executor;
 mod platform_scheduler;
 pub(crate) use platform_scheduler::PlatformScheduler;
 mod geometry;
-mod gestures;
 mod global;
-mod inspector;
-mod interactive;
-mod key_dispatch;
 mod keymap;
 mod platform;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test;
 pub mod prelude;
 /// Profiling utilities for task, frame, and thread performance tracking.
 pub mod profiler;
@@ -40,30 +33,12 @@ pub mod profiler;
 // run loops) and by platform dispatchers. Compiled on every platform.
 #[expect(missing_docs)]
 pub mod queue;
-mod scene;
 mod shared_uri;
 mod spring;
 mod style;
-mod styled;
 mod subscription;
-#[cfg(feature = "ui")]
-mod svg_renderer;
-mod tab_stop;
-mod taffy;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test;
 mod text_system;
 mod util;
-mod view;
-mod window;
-
-#[cfg(any(test, feature = "test-support"))]
-pub use proptest;
-
-#[cfg(doc)]
-pub mod _accessibility;
-#[cfg(doc)]
-pub mod _ownership_and_data_flow;
 
 /// Do not touch, here be dragons for use by gpui_macros and such.
 #[doc(hidden)]
@@ -81,24 +56,20 @@ mod seal {
     pub trait Sealed {}
 }
 
-pub use accesskit;
-pub use accesskit::Action as AccessibleAction;
-pub use accesskit::{Orientation, Role, Toggled};
 pub use action::*;
 pub use anyhow::Result;
 pub use app::*;
+#[cfg(any(test, feature = "test-support"))]
+pub use proptest;
+#[cfg(any(test, feature = "test-support"))]
+pub use test::*;
 pub(crate) use arena::*;
 pub use asset_cache::*;
 pub use assets::*;
 pub use color::*;
 pub use ctor::ctor;
-#[cfg(feature = "profiler")]
-pub use debug_overlay::*;
-pub use element::*;
-pub use elements::*;
 pub use executor::*;
 pub use geometry::*;
-pub use gestures::*;
 pub use global::*;
 pub use gpui_macros::{
     AppContext, IntoElement, Render, VisualContext, bench, property_test, register_action, test,
@@ -131,32 +102,18 @@ macro_rules! bench_main {
 pub use gpui_shared_string::*;
 pub use gpui_util::arc_cow::ArcCow;
 pub use http_client;
-pub use inspector::*;
-pub use interactive::*;
-use key_dispatch::*;
 pub use keymap::*;
 pub use platform::*;
 pub use profiler::*;
 #[cfg(any(target_os = "windows", target_os = "linux", target_family = "wasm"))]
 pub use queue::{PriorityQueueReceiver, PriorityQueueSender};
 pub use refineable::*;
-pub use scene::*;
 pub use shared_uri::*;
 use std::{any::Any, future::Future};
 pub use style::*;
-pub use styled::*;
 pub use subscription::*;
-#[cfg(feature = "ui")]
-pub use svg_renderer::*;
-pub(crate) use tab_stop::*;
-use taffy::TaffyLayoutEngine;
-pub use taffy::{AvailableSpace, LayoutId};
-#[cfg(any(test, feature = "test-support"))]
-pub use test::*;
 pub use text_system::*;
 pub use util::{FutureExt, Timeout};
-pub use view::*;
-pub use window::*;
 
 pub use pollster::block_on;
 
@@ -203,6 +160,7 @@ pub trait AppContext {
         T: 'static;
 
     /// Update a window for the given handle.
+#[cfg(feature = "ui")]
     fn update_window<T, F>(&mut self, window: AnyWindowHandle, f: F) -> Result<T>
     where
         F: FnOnce(AnyView, &mut Window, &mut App) -> T;
@@ -211,6 +169,7 @@ pub trait AppContext {
     /// rendered window that referenced the entity. Returns `None` if the
     /// entity has no current window or that window is unavailable. See
     /// [`App::with_window`] for the underlying lookup.
+#[cfg(feature = "ui")]
     fn with_window<R>(
         &mut self,
         entity_id: EntityId,
@@ -218,6 +177,7 @@ pub trait AppContext {
     ) -> Option<R>;
 
     /// Read a window off of the application context.
+#[cfg(feature = "ui")]
     fn read_window<T, R>(
         &self,
         window: &WindowHandle<T>,
@@ -250,6 +210,7 @@ impl<T: 'static> Reservation<T> {
 
 /// This trait is used for the different visual contexts in GPUI that
 /// require a window to be present.
+#[cfg(feature = "ui")]
 pub trait VisualContext: AppContext {
     /// The result type for window operations.
     type Result<T>;

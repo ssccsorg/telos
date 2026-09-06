@@ -18,9 +18,6 @@ mod headless;
 #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
 mod test;
 
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
-mod visual_test;
-
 #[cfg(all(
     feature = "screen-capture",
     any(target_os = "windows", target_os = "linux", target_os = "freebsd",)
@@ -38,18 +35,41 @@ pub(crate) type PlatformScreenCaptureFrame = ();
 pub(crate) type PlatformScreenCaptureFrame = core_video::image_buffer::CVImageBuffer;
 
 use crate::{
-    Action, App, AsyncWindowContext, BackgroundExecutor, Bounds,
-    DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Edges, ExternalDragPayload, Font,
-    FontId, FontMetrics, FontRun, ForegroundExecutor, GlyphId, GpuSpecs, Hsla, Keymap, LineLayout,
-    Pixels, PlatformGestures, PlatformInput, Point, Priority, RenderGlyphParams,
-    Scene, ShapedGlyph, ShapedRun, SharedString, Size, SystemWindowTab, Task, Window,
-    WindowControlArea, hash, point, px, size,
+    Action,
+    App,
+    BackgroundExecutor,
+    Bounds,
+    DevicePixels,
+    Edges,
+    Font,
+    FontId,
+    FontMetrics,
+    FontRun,
+    ForegroundExecutor,
+    GlyphId,
+    GpuSpecs,
+    Hsla,
+    Keymap,
+    LineLayout,
+    Pixels,
+    Point,
+    Priority,
+    RenderGlyphParams,
+    ShapedGlyph,
+    ShapedRun,
+    SharedString,
+    Size,
+    Task,
+    hash,
+    point,
+    px,
+    size,
 };
 #[cfg(feature = "ui")]
 use crate::{ImageSource, RenderImage, RenderImageParams, RenderSvgParams, SvgRenderer};
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use anyhow::bail;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use async_task::Runnable;
 use futures::channel::oneshot;
 #[cfg(all(
@@ -61,7 +81,6 @@ use image::RgbaImage;
 use image::codecs::gif::GifDecoder;
 #[cfg(feature = "ui")]
 use image::{AnimationDecoder as _, DynamicImage, Frame};
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use scheduler::Instant;
 pub use scheduler::RunnableMeta;
 use schemars::JsonSchema;
@@ -90,12 +109,6 @@ pub use app_menu::*;
 pub use keyboard::*;
 pub use keystroke::*;
 
-#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
-pub(crate) use test::*;
-
-#[cfg(any(test, feature = "test-support"))]
-pub use test::{TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream};
-
 // Production primitive for headless run loops: a real-time, OS-free
 // dispatcher whose main thread parks between runnables.
 pub use threaded_dispatcher::ThreadedDispatcher;
@@ -104,8 +117,8 @@ pub use threaded_dispatcher::ThreadedDispatcher;
 // binary instead of the windowed platform backends.
 pub use headless::HeadlessPlatform;
 
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
-pub use visual_test::VisualTestPlatform;
+#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+pub use test::{TestDispatcher, TestPlatform};
 
 // TODO(jk): return an enum instead of a string
 /// Return which compositor we're guessing we'll use.
@@ -139,6 +152,9 @@ pub fn guess_compositor() -> &'static str {
     }
 }
 
+/// The default size of a window when one is first created.
+pub const DEFAULT_WINDOW_SIZE: Size<Pixels> = size(px(1536.), px(1095.));
+
 slotmap::new_key_type! {
     /// A unique identifier for a window.
     pub struct WindowId;
@@ -156,7 +172,6 @@ impl From<u64> for WindowId {
         WindowId(slotmap::KeyData::from_ffi(value))
     }
 }
-
 
 /// A handle to a window with any root view type, which can be downcast to a
 /// window with a specific root view type. The downcast/update/read methods
@@ -282,6 +297,7 @@ pub trait Platform: 'static {
     /// The platform's gesture recognition services, if it provides any
     /// beyond gpui's portable recognizers. See
     /// [`PlatformGestures`](crate::PlatformGestures).
+#[cfg(feature = "ui")]
     fn gestures(&self) -> Option<Rc<dyn PlatformGestures>> {
         None
     }
@@ -782,15 +798,6 @@ impl Tiling {
     }
 }
 
-/// Callbacks for the accessibility adapter.
-pub struct A11yCallbacks {
-    /// Called when the adapter is activated (a screen reader connects).
-    pub activation: Box<dyn Fn() -> Option<accesskit::TreeUpdate> + Send + 'static>,
-    /// Called when an action is requested by the screen reader.
-    pub action: Box<dyn Fn(accesskit::ActionRequest) + Send + 'static>,
-    /// Called when the adapter is deactivated (screen reader disconnects).
-    pub deactivation: Box<dyn Fn() + Send + 'static>,
-}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 #[expect(missing_docs)]
@@ -871,7 +878,7 @@ pub enum TextInputStateChange {
 }
 
 #[expect(missing_docs)]
-pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
+pub trait PlatformWindow {
     fn bounds(&self) -> Bounds<Pixels>;
     fn is_maximized(&self) -> bool;
     fn window_bounds(&self) -> WindowBounds;
@@ -883,8 +890,6 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn mouse_position(&self) -> Point<Pixels>;
     fn modifiers(&self) -> Modifiers;
     fn capslock(&self) -> Capslock;
-    fn set_input_handler(&mut self, input_handler: PlatformInputHandler);
-    fn take_input_handler(&mut self) -> Option<PlatformInputHandler>;
     /// Apply the focused text region's [`TextInputConfiguration`] to the
     /// platform's text input session (e.g. attributes of the hidden editable
     /// element on web). Called only when the configuration changes, because
@@ -912,17 +917,29 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn frame_waker(&self) -> Option<Rc<dyn Fn()>> {
         None
     }
+#[cfg(feature = "ui")]
     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>);
+#[cfg(feature = "ui")]
     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> DispatchEventResult>);
+#[cfg(feature = "ui")]
     fn on_active_status_change(&self, callback: Box<dyn FnMut(bool)>);
+#[cfg(feature = "ui")]
     fn on_hover_status_change(&self, callback: Box<dyn FnMut(bool)>);
+#[cfg(feature = "ui")]
     fn on_resize(&self, callback: Box<dyn FnMut(Size<Pixels>, f32)>);
+#[cfg(feature = "ui")]
     fn on_moved(&self, callback: Box<dyn FnMut()>);
+#[cfg(feature = "ui")]
     fn on_should_close(&self, callback: Box<dyn FnMut() -> bool>);
+#[cfg(feature = "ui")]
     fn on_hit_test_window_control(&self, callback: Box<dyn FnMut() -> Option<WindowControlArea>>);
+#[cfg(feature = "ui")]
     fn on_close(&self, callback: Box<dyn FnOnce()>);
+#[cfg(feature = "ui")]
     fn on_appearance_changed(&self, callback: Box<dyn FnMut()>);
+#[cfg(feature = "ui")]
     fn on_button_layout_changed(&self, _callback: Box<dyn FnMut()>) {}
+#[cfg(feature = "ui")]
     fn draw(&self, scene: &Scene);
     fn schedule_frame(&self) {}
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
@@ -931,9 +948,6 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     // macOS specific methods
     fn get_title(&self) -> String {
         String::new()
-    }
-    fn tabbed_windows(&self) -> Option<Vec<SystemWindowTab>> {
-        None
     }
     fn tab_bar_visible(&self) -> bool {
         false
@@ -971,6 +985,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn can_start_external_drag(&self) -> bool {
         false
     }
+#[cfg(feature = "ui")]
     fn start_external_drag(&self, _payload: &ExternalDragPayload) -> bool {
         false
     }
@@ -1028,16 +1043,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
 
     fn play_system_bell(&self) {}
 
-    /// Initialize the accessibility adapter with callbacks.
-    fn a11y_init(&self, _callbacks: A11yCallbacks) {}
-
-    /// Provide a TreeUpdate to the accessibility adapter.
-    fn a11y_tree_update(&self, _tree_update: accesskit::TreeUpdate) {}
-
-    /// Inform the adapter of updated window bounds.
-    fn a11y_update_window_bounds(&self) {}
-
-    #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+    #[cfg(feature = "ui")]
     fn as_test(&mut self) -> Option<&mut TestWindow> {
         None
     }
@@ -1046,6 +1052,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     /// This does not present the frame to screen - useful for visual testing where we want
     /// to capture what would be rendered without displaying it or requiring the window to be visible.
     #[cfg(all(feature = "ui", any(test, feature = "test-support")))]
+#[cfg(feature = "ui")]
     fn render_to_image(&self, _scene: &Scene) -> Result<RgbaImage> {
         anyhow::bail!("render_to_image not implemented for this platform")
     }
@@ -1058,6 +1065,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
 ))]
 pub trait PlatformHeadlessRenderer {
     /// Render a scene and return the result as an RGBA image.
+#[cfg(feature = "ui")]
     fn render_scene_to_image(
         &mut self,
         scene: &Scene,
@@ -1069,6 +1077,7 @@ pub trait PlatformHeadlessRenderer {
     /// This is the headless analogue of presenting a frame: it performs the
     /// same CPU-side scene encoding and GPU submission as drawing to a real
     /// window, but doesn't block on GPU completion or copy pixels back.
+#[cfg(feature = "ui")]
     fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> Result<()>;
 
     /// Returns the sprite atlas used by this renderer.
@@ -1368,6 +1377,7 @@ impl AtlasKey {
             }
             #[cfg(feature = "ui")]
             AtlasKey::Svg(_) => AtlasTextureKind::Monochrome,
+            #[cfg(feature = "ui")]
             AtlasKey::Image(_) => AtlasTextureKind::Polychrome,
         }
     }
@@ -1502,248 +1512,6 @@ impl From<TileId> for etagere::AllocId {
     }
 }
 
-#[expect(missing_docs)]
-pub struct PlatformInputHandler {
-    cx: AsyncWindowContext,
-    handler: Box<dyn InputHandler>,
-}
-
-#[expect(missing_docs)]
-#[cfg_attr(
-    all(
-        any(target_os = "linux", target_os = "freebsd"),
-        not(any(feature = "x11", feature = "wayland"))
-    ),
-    allow(dead_code)
-)]
-impl PlatformInputHandler {
-    pub fn new(cx: AsyncWindowContext, handler: Box<dyn InputHandler>) -> Self {
-        Self { cx, handler }
-    }
-
-    pub fn selected_text_range(&mut self, ignore_disabled_input: bool) -> Option<UTF16Selection> {
-        self.cx
-            .update(|window, cx| {
-                self.handler
-                    .selected_text_range(ignore_disabled_input, window, cx)
-            })
-            .ok()
-            .flatten()
-    }
-
-    #[cfg_attr(target_os = "windows", allow(dead_code))]
-    pub fn marked_text_range(&mut self) -> Option<Range<usize>> {
-        self.cx
-            .update(|window, cx| self.handler.marked_text_range(window, cx))
-            .ok()
-            .flatten()
-    }
-
-    #[cfg_attr(
-        any(target_os = "linux", target_os = "freebsd", target_os = "windows"),
-        allow(dead_code)
-    )]
-    pub fn text_for_range(
-        &mut self,
-        range_utf16: Range<usize>,
-        adjusted: &mut Option<Range<usize>>,
-    ) -> Option<String> {
-        self.cx
-            .update(|window, cx| {
-                self.handler
-                    .text_for_range(range_utf16, adjusted, window, cx)
-            })
-            .ok()
-            .flatten()
-    }
-
-    pub fn replace_text_in_range(&mut self, replacement_range: Option<Range<usize>>, text: &str) {
-        self.cx
-            .update(|window, cx| {
-                self.handler
-                    .replace_text_in_range(replacement_range, text, window, cx);
-            })
-            .ok();
-    }
-
-    pub fn replace_and_mark_text_in_range(
-        &mut self,
-        range_utf16: Option<Range<usize>>,
-        new_text: &str,
-        new_selected_range: Option<Range<usize>>,
-    ) {
-        self.cx
-            .update(|window, cx| {
-                self.handler.replace_and_mark_text_in_range(
-                    range_utf16,
-                    new_text,
-                    new_selected_range,
-                    window,
-                    cx,
-                )
-            })
-            .ok();
-    }
-
-    #[cfg_attr(target_os = "windows", allow(dead_code))]
-    pub fn unmark_text(&mut self) {
-        self.cx
-            .update(|window, cx| self.handler.unmark_text(window, cx))
-            .ok();
-    }
-
-    pub fn paste(&mut self, item: ClipboardItem) {
-        self.cx
-            .update(|window, cx| self.handler.paste(item, window, cx))
-            .ok();
-    }
-
-    pub fn bounds_for_range(&mut self, range_utf16: Range<usize>) -> Option<Bounds<Pixels>> {
-        self.cx
-            .update(|window, cx| self.handler.bounds_for_range(range_utf16, window, cx))
-            .ok()
-            .flatten()
-    }
-
-    #[allow(dead_code)]
-    pub fn apple_press_and_hold_enabled(&mut self) -> bool {
-        self.handler.apple_press_and_hold_enabled()
-    }
-
-    pub fn dispatch_input(&mut self, input: &str, window: &mut Window, cx: &mut App) {
-        self.handler.replace_text_in_range(None, input, window, cx);
-    }
-
-    pub fn compute_ime_candidate_bounds(
-        marked_range: Option<Range<usize>>,
-        selection: &UTF16Selection,
-        mut bounds_for_range: impl FnMut(Range<usize>) -> Option<Bounds<Pixels>>,
-    ) -> Option<Bounds<Pixels>> {
-        if let Some(marked_range) = marked_range {
-            // Default to the start of the marked (composing) range.
-            let mut line_start = marked_range.start;
-
-            // Walk backward from the caret looking for a line break. A change in
-            // the Y coordinate means we crossed into the previous visual line, so
-            // the line start is one position after the break point.
-            let caret = selection.range.end;
-            if let Some(caret_bounds) = bounds_for_range(caret..caret) {
-                for i in (marked_range.start..caret).rev() {
-                    if let Some(b) = bounds_for_range(i..i) {
-                        if (b.origin.y - caret_bounds.origin.y).abs() > px(0.1) {
-                            line_start = i + 1;
-                            break;
-                        }
-                    }
-                }
-            }
-            bounds_for_range(line_start..line_start)
-        } else {
-            // No active composition — use the selection endpoint.
-            let offset = if selection.reversed {
-                selection.range.start
-            } else {
-                selection.range.end
-            };
-            bounds_for_range(offset..offset)
-        }
-    }
-
-    pub fn selected_bounds(&mut self, window: &mut Window, cx: &mut App) -> Option<Bounds<Pixels>> {
-        let marked_range = self.handler.marked_text_range(window, cx);
-        let selection = self.handler.selected_text_range(true, window, cx)?;
-        Self::compute_ime_candidate_bounds(marked_range, &selection, |range| {
-            self.handler.bounds_for_range(range, window, cx)
-        })
-    }
-
-    pub fn ime_candidate_bounds(&mut self) -> Option<Bounds<Pixels>> {
-        let marked_range = self.marked_text_range();
-        let selection = self.selected_text_range(true)?;
-        Self::compute_ime_candidate_bounds(marked_range, &selection, |range| {
-            self.bounds_for_range(range)
-        })
-    }
-
-    #[allow(unused)]
-    pub fn character_index_for_point(&mut self, point: Point<Pixels>) -> Option<usize> {
-        self.cx
-            .update(|window, cx| self.handler.character_index_for_point(point, window, cx))
-            .ok()
-            .flatten()
-    }
-
-    /// See [`InputHandler::set_selected_text_range`].
-    pub fn set_selected_text_range(&mut self, range_utf16: Range<usize>) {
-        self.cx
-            .update(|window, cx| {
-                self.handler
-                    .set_selected_text_range(range_utf16, window, cx)
-            })
-            .ok();
-    }
-
-    /// See [`InputHandler::element_bounds`].
-    pub fn element_bounds(&mut self) -> Option<Bounds<Pixels>> {
-        self.cx
-            .update(|window, cx| self.handler.element_bounds(window, cx))
-            .ok()
-            .flatten()
-    }
-
-    /// See [`InputHandler::text_length_utf16`].
-    pub fn text_length_utf16(&mut self) -> Option<usize> {
-        self.cx
-            .update(|window, cx| self.handler.text_length_utf16(window, cx))
-            .ok()
-            .flatten()
-    }
-
-    #[allow(dead_code)]
-    pub fn accepts_text_input(&mut self, window: &mut Window, cx: &mut App) -> bool {
-        self.handler.accepts_text_input(window, cx)
-    }
-
-    #[allow(dead_code)]
-    pub fn query_accepts_text_input(&mut self) -> bool {
-        self.cx
-            .update(|window, cx| self.handler.accepts_text_input(window, cx))
-            .unwrap_or(true)
-    }
-
-    /// See [`InputHandler::prefers_ime_for_printable_keys`].
-    ///
-    /// This is not a pure delegation to the handler: while a multi-stroke binding is pending this
-    /// returns `false` regardless of the handler's preference, because the next printable key may
-    /// complete a binding whose prefix already bypassed the IME.
-    pub fn query_prefers_ime_for_printable_keys(&mut self) -> bool {
-        self.cx
-            .update(|window, cx| {
-                // The next printable key may complete a chord whose prefix bypassed the IME.
-                !window.has_pending_keystrokes()
-                    && self.handler.prefers_ime_for_printable_keys(window, cx)
-            })
-            .unwrap_or(false)
-    }
-
-    /// See [`InputHandler::text_input_configuration`].
-    pub fn text_input_configuration(
-        &mut self,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> TextInputConfiguration {
-        self.handler.text_input_configuration(window, cx)
-    }
-
-    /// See [`InputHandler::text_input_editable_range`].
-    pub fn text_input_editable_range(&mut self) -> Option<Range<usize>> {
-        self.cx
-            .update(|window, cx| self.handler.text_input_editable_range(window, cx))
-            .ok()
-            .flatten()
-    }
-}
-
 /// A struct representing a selection in a text buffer, in UTF16 characters.
 /// This is different from a range because the head may be before the tail.
 #[derive(Debug)]
@@ -1765,6 +1533,7 @@ pub trait InputHandler: 'static {
     /// Corresponds to [selectedRange()](https://developer.apple.com/documentation/appkit/nstextinputclient/1438242-selectedrange)
     ///
     /// Return value is in terms of UTF-16 characters, from 0 to the length of the document
+#[cfg(feature = "ui")]
     fn selected_text_range(
         &mut self,
         ignore_disabled_input: bool,
@@ -1776,12 +1545,14 @@ pub trait InputHandler: 'static {
     /// Corresponds to [markedRange()](https://developer.apple.com/documentation/appkit/nstextinputclient/1438250-markedrange)
     ///
     /// Return value is in terms of UTF-16 characters, from 0 to the length of the document
+#[cfg(feature = "ui")]
     fn marked_text_range(&mut self, window: &mut Window, cx: &mut App) -> Option<Range<usize>>;
 
     /// Get the text for the given document range in UTF-16 characters
     /// Corresponds to [attributedSubstring(forProposedRange: actualRange:)](https://developer.apple.com/documentation/appkit/nstextinputclient/1438238-attributedsubstring)
     ///
     /// range_utf16 is in terms of UTF-16 characters
+#[cfg(feature = "ui")]
     fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
@@ -1794,6 +1565,7 @@ pub trait InputHandler: 'static {
     /// Corresponds to [insertText(_:replacementRange:)](https://developer.apple.com/documentation/appkit/nstextinputclient/1438258-inserttext)
     ///
     /// replacement_range is in terms of UTF-16 characters
+#[cfg(feature = "ui")]
     fn replace_text_in_range(
         &mut self,
         replacement_range: Option<Range<usize>>,
@@ -1808,6 +1580,7 @@ pub trait InputHandler: 'static {
     ///
     /// range_utf16 is in terms of UTF-16 characters
     /// new_selected_range is in terms of UTF-16 characters
+#[cfg(feature = "ui")]
     fn replace_and_mark_text_in_range(
         &mut self,
         range_utf16: Option<Range<usize>>,
@@ -1819,6 +1592,7 @@ pub trait InputHandler: 'static {
 
     /// Remove the IME 'composing' state from the document
     /// Corresponds to [unmarkText()](https://developer.apple.com/documentation/appkit/nstextinputclient/1438239-unmarktext)
+#[cfg(feature = "ui")]
     fn unmark_text(&mut self, window: &mut Window, cx: &mut App);
 
     /// Insert a platform-initiated paste at the current selection.
@@ -1827,6 +1601,7 @@ pub trait InputHandler: 'static {
     /// application-defined action (e.g. the DOM `paste` event on web) call
     /// this with the full clipboard contents. The default implementation
     /// inserts only the plain-text portion of the item.
+#[cfg(feature = "ui")]
     fn paste(&mut self, item: ClipboardItem, window: &mut Window, cx: &mut App) {
         if let Some(text) = item.text() {
             self.replace_text_in_range(None, &text, window, cx);
@@ -1837,6 +1612,7 @@ pub trait InputHandler: 'static {
     /// Corresponds to [firstRect(forCharacterRange:actualRange:)](https://developer.apple.com/documentation/appkit/nstextinputclient/1438240-firstrect)
     ///
     /// This is used for positioning the IME candidate window
+#[cfg(feature = "ui")]
     fn bounds_for_range(
         &mut self,
         range_utf16: Range<usize>,
@@ -1847,6 +1623,7 @@ pub trait InputHandler: 'static {
     /// Get the character offset for the given point in terms of UTF16 characters
     ///
     /// Corresponds to [characterIndexForPoint:](https://developer.apple.com/documentation/appkit/nstextinputclient/characterindex(for:))
+#[cfg(feature = "ui")]
     fn character_index_for_point(
         &mut self,
         point: Point<Pixels>,
@@ -1863,6 +1640,7 @@ pub trait InputHandler: 'static {
     /// Android `InputConnection.setSelection`).
     ///
     /// range_utf16 is in terms of UTF-16 characters, from 0 to the length of the document
+#[cfg(feature = "ui")]
     fn set_selected_text_range(
         &mut self,
         _range_utf16: Range<usize>,
@@ -1877,11 +1655,13 @@ pub trait InputHandler: 'static {
     /// push: mobile platforms ask for the focused element's geometry when they
     /// need it (e.g. to frame system text-interaction UI overlaid on the focused
     /// element).
+#[cfg(feature = "ui")]
     fn element_bounds(&mut self, _window: &mut Window, _cx: &mut App) -> Option<Bounds<Pixels>> {
         None
     }
 
     /// Get the length of the document in UTF-16 characters, if known.
+#[cfg(feature = "ui")]
     fn text_length_utf16(&mut self, _window: &mut Window, _cx: &mut App) -> Option<usize> {
         None
     }
@@ -1896,6 +1676,7 @@ pub trait InputHandler: 'static {
     }
 
     /// Returns whether this handler is accepting text input to be inserted.
+#[cfg(feature = "ui")]
     fn accepts_text_input(&mut self, _window: &mut Window, _cx: &mut App) -> bool {
         true
     }
@@ -1910,6 +1691,7 @@ pub trait InputHandler: 'static {
     /// when it cannot (a selection spanning a region boundary), platforms
     /// degrade the mirrored IME context rather than widening the range.
     /// `None` places no bound.
+#[cfg(feature = "ui")]
     fn text_input_editable_range(
         &mut self,
         _window: &mut Window,
@@ -1926,6 +1708,7 @@ pub trait InputHandler: 'static {
     /// Defaults to `false`. The editor overrides this based on whether it expects
     /// character input (e.g. Vim insert mode returns `true`, normal mode returns `false`).
     /// The terminal keeps the default `false` so that raw keys reach the terminal process.
+#[cfg(feature = "ui")]
     fn prefers_ime_for_printable_keys(&mut self, _window: &mut Window, _cx: &mut App) -> bool {
         false
     }
@@ -1935,6 +1718,7 @@ pub trait InputHandler: 'static {
     /// GPUI re-queries this every frame and forwards it to the platform window
     /// only when it changes, so implementations must be cheap and may vary the
     /// result with application state (e.g. with the cursor's position).
+#[cfg(feature = "ui")]
     fn text_input_configuration(
         &mut self,
         _window: &mut Window,
@@ -2539,6 +2323,7 @@ pub enum ClipboardEntry {
     /// An image entry
     Image(Image),
     /// A file entry
+    #[cfg(feature = "ui")]
     ExternalPaths(crate::ExternalPaths),
 }
 
@@ -2588,9 +2373,10 @@ impl ClipboardItem {
         }
 
         if answer.is_empty() {
-            for entry in self.entries.iter() {
-                if let ClipboardEntry::ExternalPaths(paths) = entry {
-                    for path in &paths.0 {
+            for _entry in self.entries.iter() {
+                #[cfg(feature = "ui")]
+                if let ClipboardEntry::ExternalPaths(_entry) = _entry {
+                    for path in &_entry.0 {
                         use std::fmt::Write as _;
                         _ = write!(answer, "{}", path.display());
                     }
@@ -2810,6 +2596,7 @@ impl Image {
 
     /// Use the GPUI `use_asset` API to make this image renderable
     #[cfg(feature = "ui")]
+#[cfg(feature = "ui")]
     pub fn use_render_image(
         self: Arc<Self>,
         window: &mut Window,
@@ -2822,6 +2609,7 @@ impl Image {
 
     /// Use the GPUI `get_asset` API to make this image renderable
     #[cfg(feature = "ui")]
+#[cfg(feature = "ui")]
     pub fn get_render_image(
         self: Arc<Self>,
         window: &mut Window,

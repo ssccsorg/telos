@@ -42,6 +42,28 @@ fn map_launch_env() {
     }
 }
 
+/// Extracts the `--user-data-dir` value from the process arguments.
+///
+/// Both `--user-data-dir <path>` and `--user-data-dir=<path>` forms are
+/// accepted. The actus launch contract passes the flag so the agent reads the
+/// settings and credentials actus wrote under `<dir>/config` and
+/// `<dir>/credentials`; the flag value must be consumed before any settings or
+/// paths code resolves the default data directory.
+fn user_data_dir_from_args(args: &[String]) -> Option<String> {
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        if let Some(value) = arg.strip_prefix("--user-data-dir=") {
+            return Some(value.to_string());
+        }
+        if arg == "--user-data-dir" {
+            return args.get(index + 1).cloned();
+        }
+        index += 1;
+    }
+    None
+}
+
 fn main() {
     map_launch_env();
     // The shell-env capture invokes this binary with `--printenv` to dump
@@ -52,6 +74,16 @@ fn main() {
     if std::env::args().any(|a| a == "--printenv") {
         util::shell_env::print_env();
         return;
+    }
+
+    // Actus launches the agent with `--user-data-dir <dir>` and writes the
+    // settings bootstrap (LLM provider, `context_servers` MCP entries) and
+    // credentials under that directory. Pin the custom data directory before
+    // `settings::init` resolves `paths::config_dir`/`data_dir`, so the
+    // actus-injected configuration is actually loaded.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(data_dir) = user_data_dir_from_args(&args) {
+        paths::set_custom_data_dir(&data_dir);
     }
 
     // Headless runtime: gpui::HeadlessPlatform over ThreadedDispatcher. The
@@ -199,7 +231,7 @@ fn run_headless(cx: &mut App) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::map_launch_env;
+    use super::{map_launch_env, user_data_dir_from_args};
 
     // Env mutation is process-global; serialize the two tests.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -262,5 +294,41 @@ mod tests {
             );
         }
         clear_env();
+    }
+
+    #[test]
+    fn parses_user_data_dir_from_separate_argument() {
+        let args = [
+            "tel".to_string(),
+            "--headless".to_string(),
+            "--user-data-dir".to_string(),
+            "/tmp/actus-agent".to_string(),
+            "/workspace".to_string(),
+        ];
+        assert_eq!(
+            user_data_dir_from_args(&args).as_deref(),
+            Some("/tmp/actus-agent")
+        );
+    }
+
+    #[test]
+    fn parses_user_data_dir_from_equals_argument() {
+        let args = ["tel".to_string(), "--user-data-dir=/tmp/actus-agent".to_string()];
+        assert_eq!(
+            user_data_dir_from_args(&args).as_deref(),
+            Some("/tmp/actus-agent")
+        );
+    }
+
+    #[test]
+    fn returns_none_without_user_data_dir() {
+        let args = ["tel".to_string(), "--printenv".to_string()];
+        assert_eq!(user_data_dir_from_args(&args), None);
+    }
+
+    #[test]
+    fn returns_none_when_user_data_dir_flag_is_last() {
+        let args = ["tel".to_string(), "--user-data-dir".to_string()];
+        assert_eq!(user_data_dir_from_args(&args), None);
     }
 }
