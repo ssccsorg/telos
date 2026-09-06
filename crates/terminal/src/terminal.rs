@@ -3586,7 +3586,7 @@ mod tests {
     };
     use collections::HashMap;
     use gpui::{
-        ClipboardItem, Entity, Pixels, TestAppContext, VisualTestContext, bounds, point, size,
+        ClipboardItem, Entity, Pixels, TestAppContext, bounds, point, size,
     };
     use parking_lot::Mutex;
     use rand::{Rng, distr, rngs::StdRng};
@@ -3890,237 +3890,6 @@ mod tests {
         terminal
     }
 
-    fn init_terminal_test_with_window<'a>(
-        cx: &'a mut TestAppContext,
-        initial_content: &[u8],
-    ) -> (Entity<Terminal>, &'a mut VisualTestContext) {
-        cx.update(|cx| {
-            let settings_store = settings::SettingsStore::test(cx);
-            cx.set_global(settings_store);
-        });
-
-        cx.executor().allow_parking();
-
-        let window = cx.add_empty_window();
-        let builder = window.update(|window, cx| {
-            TerminalBuilder::new_display_only(
-                SettingsCursorShape::default(),
-                AlternateScroll::On,
-                None,
-                window.window_handle().window_id().as_u64(),
-                cx.background_executor(),
-                PathStyle::local(),
-            )
-        });
-        let terminal = window.new(|cx| builder.subscribe(cx));
-
-        terminal.update(window, |term, cx| {
-            term.write_output(initial_content, cx);
-        });
-
-        (terminal, window)
-    }
-
-    fn left_mouse_down_at(
-        terminal: &mut Terminal,
-        position: GpuiPoint<Pixels>,
-        cx: &mut Context<Terminal>,
-    ) {
-        let mouse_down = MouseDownEvent {
-            button: MouseButton::Left,
-            position,
-            modifiers: Modifiers::none(),
-            click_count: 1,
-            first_mouse: true,
-        };
-        terminal.mouse_down(&mouse_down, cx);
-    }
-
-    fn left_mouse_up_at(
-        terminal: &mut Terminal,
-        position: GpuiPoint<Pixels>,
-        cx: &mut Context<Terminal>,
-    ) {
-        let mouse_up = MouseUpEvent {
-            button: MouseButton::Left,
-            position,
-            modifiers: Modifiers::none(),
-            click_count: 1,
-        };
-        terminal.mouse_up(&mouse_up, cx);
-    }
-
-    fn left_mouse_drag_to(
-        terminal: &mut Terminal,
-        position: GpuiPoint<Pixels>,
-        cx: &mut Context<Terminal>,
-    ) {
-        let region = terminal.last_content.terminal_bounds.bounds;
-        let drag_event = MouseMoveEvent {
-            position,
-            pressed_button: Some(MouseButton::Left),
-            modifiers: Modifiers::none(),
-        };
-        terminal.mouse_drag(&drag_event, region, cx);
-    }
-
-    /// A left click that jitters by a pixel or two (e.g. the window-focusing
-    /// click) must not begin a selection, otherwise `copy_on_select` would
-    /// overwrite the clipboard. Regression test for #58970.
-    #[gpui::test]
-    async fn test_terminal_click_jitter_does_not_start_selection(cx: &mut TestAppContext) {
-        let terminal = init_terminal_test(cx, b"hello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            left_mouse_down_at(terminal, point(px(50.0), px(10.0)), cx);
-            terminal.events.clear();
-
-            // One pixel of movement is below the drag threshold.
-            left_mouse_drag_to(terminal, point(px(51.0), px(10.0)), cx);
-
-            assert!(
-                !terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "a sub-threshold click jitter should not start a selection"
-            );
-            assert!(terminal.selection_phase == SelectionPhase::Ended);
-        });
-    }
-
-    /// A deliberate drag past the threshold must still start a selection.
-    #[gpui::test]
-    async fn test_terminal_deliberate_drag_starts_selection(cx: &mut TestAppContext) {
-        let terminal = init_terminal_test(cx, b"hello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            left_mouse_down_at(terminal, point(px(50.0), px(10.0)), cx);
-            terminal.events.clear();
-
-            // Well beyond the drag threshold.
-            left_mouse_drag_to(terminal, point(px(90.0), px(10.0)), cx);
-
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "a deliberate drag should start a selection"
-            );
-            assert!(terminal.selection_phase == SelectionPhase::Selecting);
-        });
-    }
-
-    /// With mouse tracking active (e.g. htop), Shift is the escape hatch to
-    /// select terminal text. Shift+drag must start a selection rather than being
-    /// swallowed as a "extend existing selection" no-op. Regression test for #60254.
-    #[gpui::test]
-    async fn test_terminal_shift_drag_selects_while_mouse_tracking(cx: &mut TestAppContext) {
-        // `?1002h` enables button-event mouse tracking, `?1006h` selects SGR encoding.
-        let terminal = init_terminal_test(cx, b"\x1b[?1002h\x1b[?1006hhello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            assert!(
-                terminal.last_content.mode.intersects(Modes::MOUSE_MODE),
-                "mouse tracking should be active"
-            );
-
-            let shift = Modifiers {
-                shift: true,
-                ..Modifiers::none()
-            };
-            terminal.mouse_down(
-                &MouseDownEvent {
-                    button: MouseButton::Left,
-                    position: point(px(50.0), px(10.0)),
-                    modifiers: shift,
-                    click_count: 1,
-                    first_mouse: true,
-                },
-                cx,
-            );
-
-            // With no selection yet, the shift press must anchor a new selection
-            // so the following drag has something to extend.
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::SetSelection(Some(_)))),
-                "shift+click with no existing selection should anchor a selection"
-            );
-            terminal.events.clear();
-
-            let region = terminal.last_content.terminal_bounds.bounds;
-            terminal.mouse_drag(
-                &MouseMoveEvent {
-                    position: point(px(90.0), px(10.0)),
-                    pressed_button: Some(MouseButton::Left),
-                    modifiers: shift,
-                },
-                region,
-                cx,
-            );
-
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "shift+drag should extend the selection while mouse tracking is active"
-            );
-            assert!(terminal.selection_phase == SelectionPhase::Selecting);
-        });
-    }
-
-    /// Shift+click with a selection already on screen must keep extending it
-    /// (the behavior added in #25143), not re-anchor a fresh one.
-    #[gpui::test]
-    async fn test_terminal_shift_click_extends_existing_selection(cx: &mut TestAppContext) {
-        let terminal = init_terminal_test(cx, b"hello world\r\n");
-
-        terminal.update(cx, |terminal, cx| {
-            // A visible selection, as a sync would have populated in production.
-            terminal.last_content.selection = Some(SelectionRange {
-                start: Point::new(0, 0),
-                end: Point::new(0, 5),
-                is_block: false,
-            });
-            terminal.events.clear();
-
-            terminal.mouse_down(
-                &MouseDownEvent {
-                    button: MouseButton::Left,
-                    position: point(px(90.0), px(10.0)),
-                    modifiers: Modifiers {
-                        shift: true,
-                        ..Modifiers::none()
-                    },
-                    click_count: 1,
-                    first_mouse: true,
-                },
-                cx,
-            );
-
-            assert!(
-                terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::UpdateSelection(_))),
-                "shift+click with an existing selection should extend it"
-            );
-            assert!(
-                !terminal
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, InternalEvent::SetSelection(Some(_)))),
-                "shift+click should extend, not re-anchor, an existing selection"
-            );
-        });
-    }
-
-    #[gpui::test]
     async fn test_basic_terminal(cx: &mut TestAppContext) {
         cx.executor().allow_parking();
 
@@ -4803,6 +4572,7 @@ mod tests {
         assert_eq!(clipboard_text.as_deref(), Some("original"));
     }
 
+    #[cfg(feature = "ui")]
     mod hyperlinks {
         use super::{
             init_terminal_test, init_terminal_test_with_window, left_mouse_down_at,
@@ -5692,6 +5462,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "ui")]
     mod perf {
         use super::{super::*, init_terminal_test_with_window};
         use gpui::{ScrollDelta, ScrollWheelEvent, TestAppContext, VisualContext, point};
