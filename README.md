@@ -2,7 +2,8 @@
 
 A general agent that runs as a fleet of peers with coordinate teleport.
 
-Telos is the headless execution layer of the SSCCS stack. It receives
+Telos is the headless execution layer, built on
+Zed's agent machinery with the telos concept fused on top. It receives
 commands from actus and converts them into system calls, tool
 invocations, and protocol traffic over files, processes, and networks.
 The working thesis is that an agent does not need to traverse trees to
