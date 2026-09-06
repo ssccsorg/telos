@@ -4650,7 +4650,7 @@ impl LspCommand for SemanticTokensDelta {
             text_document: lsp::TextDocumentIdentifier {
                 uri: file_path_to_lsp_url(path)?,
             },
-            previous_result_id: self.previous_result_id.clone().map(|s| s.to_string()),
+            previous_result_id: self.previous_result_id.to_string(),
             partial_result_params: Default::default(),
             work_done_progress_params: Default::default(),
         })
