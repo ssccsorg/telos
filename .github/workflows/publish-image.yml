@@ -16,6 +16,8 @@ name: Publish agent image
 on:
   push:
     branches: ["main"]
+    # Documentation-only changes do not rebuild or publish the image.
+    paths-ignore: ["**/*.md", "**/*.qmd", "docs/**"]
     tags: ["v*"]
   workflow_dispatch:
 

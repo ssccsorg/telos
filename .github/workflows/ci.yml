@@ -3,8 +3,11 @@ name: Test telos (LLM-free)
 on:
   push:
     branches: ["main"]
+    # Documentation-only changes do not trigger CI.
+    paths-ignore: ["**/*.md", "**/*.qmd", "docs/**"]
   pull_request:
     branches: ["main"]
+    paths-ignore: ["**/*.md", "**/*.qmd", "docs/**"]
   workflow_dispatch:
 
 concurrency:
