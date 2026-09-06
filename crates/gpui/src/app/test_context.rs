@@ -253,12 +253,7 @@ impl TestAppContext {
     /// Returns a receiver that completes when the platform is asked to
     /// restart, carrying the restart arguments.
     pub fn expect_restart(&self) -> oneshot::Receiver<(Option<PathBuf>, Vec<std::ffi::OsString>)> {
-        let (tx, rx) = oneshot::channel();
-        // The test platform records restarts in a vec; expose the latest one
-        // by draining on restart. For tests that have not restarted yet, this
-        // receiver stays pending until the platform records a restart.
-        let _ = tx;
-        rx
+        self.test_platform.expect_restart()
     }
 
     /// Whether a restart has been requested through the platform.

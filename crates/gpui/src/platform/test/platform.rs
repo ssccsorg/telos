@@ -31,6 +31,7 @@ pub struct TestPlatform {
     pub(crate) dismissed_notifications: RefCell<Vec<String>>,
     pub(crate) app_identity: RefCell<Option<(String, String)>>,
     pub(crate) restarts: RefCell<Vec<(Option<PathBuf>, Vec<std::ffi::OsString>)>>,
+    expect_restart: RefCell<Option<oneshot::Sender<(Option<PathBuf>, Vec<std::ffi::OsString>)>>>,
     pub(crate) path_prompt_requests:
         RefCell<Vec<(PathPromptOptions, oneshot::Sender<anyhow::Result<Option<Vec<PathBuf>>>>)>>,
     pub(crate) new_path_prompt_senders:
@@ -54,9 +55,19 @@ impl TestPlatform {
             dismissed_notifications: RefCell::new(Vec::new()),
             app_identity: RefCell::new(None),
             restarts: RefCell::new(Vec::new()),
+            expect_restart: RefCell::new(None),
             path_prompt_requests: RefCell::new(Vec::new()),
             new_path_prompt_senders: RefCell::new(Vec::new()),
         })
+    }
+
+    /// Register a receiver for the next restart request.
+    pub(crate) fn expect_restart(
+        &self,
+    ) -> oneshot::Receiver<(Option<PathBuf>, Vec<std::ffi::OsString>)> {
+        let (tx, rx) = oneshot::channel();
+        *self.expect_restart.borrow_mut() = Some(tx);
+        rx
     }
 
     /// Resolve the first pending path-picker prompt with the given selection.
@@ -111,7 +122,10 @@ impl Platform for TestPlatform {
     }
 
     fn restart(&self, binary_path: Option<PathBuf>, arguments: Vec<std::ffi::OsString>) {
-        self.restarts.borrow_mut().push((binary_path, arguments));
+        self.restarts.borrow_mut().push((binary_path.clone(), arguments.clone()));
+        if let Some(tx) = self.expect_restart.borrow_mut().take() {
+            let _ = tx.send((binary_path, arguments));
+        }
         self.quit.store(true, Ordering::SeqCst);
     }
 

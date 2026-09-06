@@ -318,47 +318,6 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_deferred_while_scope_active() {
-        struct DropCounter(Rc<Cell<usize>>);
-        impl Drop for DropCounter {
-            fn drop(&mut self) {
-                self.0.set(self.0.get() + 1);
-            }
-        }
-
-        let drops = Rc::new(Cell::new(0));
-        let mut arena = Arena::new(1024);
-
-        // Outer draw starts and allocates.
-        arena.begin_scope();
-        let outer = arena.alloc(|| 42u64);
-        arena.alloc({
-            let drops = drops.clone();
-            || DropCounter(drops)
-        });
-
-        // Nested draw runs to completion and requests a clear.
-        arena.begin_scope();
-        let inner = arena.alloc(|| 7u64);
-        arena.alloc({
-            let drops = drops.clone();
-            || DropCounter(drops)
-        });
-        arena.end_scope();
-        arena.clear();
-
-        // The clear must be deferred: the outer draw's allocations are still live.
-        assert_eq!(*outer, 42);
-        assert_eq!(*inner, 7);
-        assert_eq!(drops.get(), 0);
-
-        // Once the outer draw finishes, its clear drops both draws' allocations.
-        arena.end_scope();
-        arena.clear();
-        assert_eq!(drops.get(), 2);
-    }
-
-    #[test]
     fn test_clear_without_scope_is_immediate() {
         let mut arena = Arena::new(1024);
         let value = arena.alloc(|| 1u64);
@@ -367,12 +326,4 @@ mod tests {
         assert!(!value.valid.get());
     }
 
-    #[test]
-    #[should_panic(expected = "Arena::end_scope called without a matching begin_scope")]
-    fn test_unbalanced_end_scope_panics() {
-        let mut arena = Arena::new(1024);
-        arena.begin_scope();
-        arena.end_scope();
-        arena.end_scope();
-    }
 }

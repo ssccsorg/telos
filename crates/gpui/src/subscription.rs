@@ -202,14 +202,14 @@ impl std::fmt::Debug for Subscription {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Global, TestApp};
+    use crate::{Global, TestAppContext};
 
     #[test]
     fn test_unsubscribe_during_callback_with_insert() {
         struct TestGlobal;
         impl Global for TestGlobal {}
 
-        let mut app = TestApp::new();
+        let mut app = TestAppContext::single();
         app.set_global(TestGlobal);
 
         let observer_a_count = Rc::new(Cell::new(0usize));
@@ -260,7 +260,7 @@ mod tests {
         struct TestGlobal;
         impl Global for TestGlobal {}
 
-        let mut app = TestApp::new();
+        let mut app = TestAppContext::single();
         app.set_global(TestGlobal);
 
         let observer_b_count = Rc::new(Cell::new(0usize));
@@ -300,7 +300,7 @@ mod tests {
         struct TestGlobal;
         impl Global for TestGlobal {}
 
-        let mut app = TestApp::new();
+        let mut app = TestAppContext::single();
         app.set_global(TestGlobal);
 
         let count = Rc::new(Cell::new(0usize));
@@ -329,7 +329,7 @@ mod tests {
         struct TestGlobal;
         impl Global for TestGlobal {}
 
-        let mut app = TestApp::new();
+        let mut app = TestAppContext::single();
         app.set_global(TestGlobal);
 
         let count = Rc::new(Cell::new(0usize));
