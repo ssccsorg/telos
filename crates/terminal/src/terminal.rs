@@ -8,7 +8,6 @@ pub mod terminal_settings;
 use anyhow::Context as _;
 use anyhow::{Result, bail};
 use futures_lite::future::yield_now;
-use log::trace;
 
 use futures::{
     FutureExt,
@@ -30,9 +29,8 @@ use pty_info::{ProcessIdGetter, PtyProcessInfo};
 use serde::{Deserialize, Serialize};
 use settings::Settings;
 use task::{HideStrategy, Shell, ShellKind, SpawnInTerminal};
-use terminal_settings::{AlternateScroll, CursorShape as SettingsCursorShape, TerminalSettings};
+use terminal_settings::{AlternateScroll, CursorShape as SettingsCursorShape};
 use theme::{ActiveTheme, Theme};
-use urlencoding;
 use util::{ResultExt as _, paths::PathStyle, truncate_and_trailoff};
 
 #[cfg(unix)]
@@ -56,7 +54,7 @@ pub use vte::ansi::{Color, NamedColor, Rgb};
 
 use gpui::{
     App, AppContext as _, BackgroundExecutor, Bounds, ClipboardItem, Context, EventEmitter, Hsla,
-    Keystroke, Modifiers, Pixels, Point as GpuiPoint, Rgba, Size, Task, actions, black, px,
+    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, actions, black, px,
 };
 #[cfg(any(test, feature = "ui"))]
 use gpui::{MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollWheelEvent, TouchPhase, Window};
@@ -64,16 +62,11 @@ use gpui::{MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollWhee
 #[cfg(not(windows))]
 use crate::alacritty::current_child_signal_mask;
 use crate::alacritty::{
-    AlacrittyCell, AlacrittyGridIterator, AlacrittyHyperlink, AlacrittySearch, AlacrittyTerm,
+    AlacrittyCell, AlacrittyGridIterator, AlacrittyHyperlink, AlacrittySearch,
     AlacrittyTermConfig, AlacrittyTermLock, HyperlinkMatch, PtySender, RegexSearches,
-    append_text_to_term, apply_config, clear_saved_screen, content_text, display_offset,
-    display_only_term_config, find_from_terminal_point, full_content_range, last_non_empty_lines,
-    make_content, new_term, open_pty, pty_options, pty_term_config, resize, screen_lines,
-    scroll_display, scroll_to_point, search_matches, selection_text, set_default_cursor_style,
-    set_selection as set_term_selection, shrink_to_used, spawn_event_loop,
-    toggle_vi_mode as toggle_term_vi_mode, total_lines, update_selection as update_term_selection,
-    update_selection_to_vi_cursor, update_vi_cursor_for_scroll, used_lines, vi_goto_point,
-    vi_motion,
+    append_text_to_term, apply_config, clear_saved_screen, content_text,
+    display_only_term_config, full_content_range, last_non_empty_lines,
+    make_content, new_term, open_pty, pty_options, pty_term_config, screen_lines, search_matches, set_default_cursor_style, shrink_to_used, spawn_event_loop, total_lines, used_lines,
 };
 use crate::mappings::colors::to_vte_rgb;
 use crate::mappings::keys::to_esc_str;
