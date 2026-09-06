@@ -318,3 +318,28 @@ impl std::fmt::Debug for TestAppContext {
             .finish()
     }
 }
+
+impl<T: 'static> Entity<T> {
+    /// Block until the next event is emitted by the entity, then return it.
+    pub fn next_event<Event>(&self, cx: &mut TestAppContext) -> impl Future<Output = Event>
+    where
+        Event: Send + Clone + 'static,
+        T: EventEmitter<Event>,
+    {
+        let (tx, mut rx) = oneshot::channel();
+        let mut tx = Some(tx);
+        let subscription = self.update(cx, |_, cx: &mut Context<T>| {
+            cx.subscribe(self, move |_, _, event, _| {
+                if let Some(tx) = tx.take() {
+                    _ = tx.send(event.clone());
+                }
+            })
+        });
+
+        async move {
+            let event = rx.await.expect("no event emitted");
+            drop(subscription);
+            event
+        }
+    }
+}
