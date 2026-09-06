@@ -63,6 +63,8 @@ pub use action::*;
 pub use anyhow::Result;
 pub use app::*;
 #[cfg(any(test, feature = "test-support"))]
+pub use proptest;
+#[cfg(any(test, feature = "test-support"))]
 pub use test::*;
 pub(crate) use arena::*;
 pub use asset_cache::*;

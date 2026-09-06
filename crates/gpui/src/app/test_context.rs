@@ -155,6 +155,21 @@ impl TestAppContext {
         self.dispatcher.run_until_parked()
     }
 
+    /// Returns an [`AsyncApp`] bound to this context's app.
+    pub fn to_async(&self) -> AsyncApp {
+        self.app.borrow().to_async()
+    }
+
+    /// Run the given task on the main thread.
+    #[track_caller]
+    pub fn spawn<Fut, R>(&self, f: impl FnOnce(AsyncApp) -> Fut) -> Task<R>
+    where
+        Fut: Future<Output = R> + 'static,
+        R: 'static,
+    {
+        self.foreground_executor.spawn(f(self.to_async()))
+    }
+
     /// Called by the test helper to end the test; public so the macro can
     /// call it.
     pub fn quit(&self) {
@@ -254,6 +269,45 @@ impl TestAppContext {
     /// Open a window handle list. The test platform never creates windows.
     pub fn windows(&self) -> Vec<AnyWindowHandle> {
         Vec::new()
+    }
+
+    /// Returns a stream of notifications whenever the Entity is updated.
+    pub fn notifications<T: 'static>(
+        &mut self,
+        entity: &Entity<T>,
+    ) -> impl futures::Stream<Item = ()> + use<T> {
+        let (tx, rx) = futures::channel::mpsc::unbounded();
+        self.update(|cx| {
+            cx.observe(entity, {
+                let tx = tx.clone();
+                move |_, _| {
+                    let _ = tx.unbounded_send(());
+                }
+            })
+            .detach();
+            cx.observe_release(entity, move |_, _| tx.close_channel())
+                .detach()
+        });
+        rx
+    }
+
+    /// Returns a stream of events emitted by the given Entity.
+    pub fn events<Evt, T: 'static + EventEmitter<Evt>>(
+        &mut self,
+        entity: &Entity<T>,
+    ) -> futures::channel::mpsc::UnboundedReceiver<Evt>
+    where
+        Evt: 'static + Clone,
+    {
+        let (tx, rx) = futures::channel::mpsc::unbounded();
+        entity
+            .update(self, |_, cx: &mut Context<T>| {
+                cx.subscribe(entity, move |_entity, _handle, event, _cx| {
+                    let _ = tx.unbounded_send(event.clone());
+                })
+            })
+            .detach();
+        rx
     }
 }
 
