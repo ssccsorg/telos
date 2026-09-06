@@ -16,7 +16,7 @@ use futures::{
 
 use alacritty_terminal::grid::Dimensions as _;
 use itertools::Itertools as _;
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
 use mappings::mouse::{
     alt_scroll, grid_point, grid_point_and_side, mouse_button_report, mouse_moved_report,
     scroll_report,
@@ -56,7 +56,7 @@ use gpui::{
     App, AppContext as _, BackgroundExecutor, Bounds, ClipboardItem, Context, EventEmitter, Hsla,
     Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, actions, black, px,
 };
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
 use gpui::{MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollWheelEvent, TouchPhase, Window};
 
 #[cfg(not(windows))]
@@ -1698,7 +1698,7 @@ impl Terminal {
         self.selection_phase == SelectionPhase::Selecting
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn process_terminal_event(
         &mut self,
         event: &InternalEvent,
@@ -1855,7 +1855,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn process_hyperlink(
         &mut self,
         hyperlink: HyperlinkMatch,
@@ -1899,14 +1899,14 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn clear_hyperlink(&mut self, cx: &mut Context<Self>) {
         if self.last_content.last_hovered_word.take().is_some() {
             cx.emit(Event::NewNavigationTarget(None));
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn find_hyperlink_at_point(&mut self, point: Point) -> Option<HyperlinkMatch> {
         let term_lock = self.term.lock();
         find_from_terminal_point(
@@ -1917,7 +1917,7 @@ impl Terminal {
         )
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn update_selected_word(
         &mut self,
         prev_word: Option<HoveredWord>,
@@ -1943,7 +1943,7 @@ impl Terminal {
         cx.notify()
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn next_link_id(&mut self) -> usize {
         let res = self.next_link_id;
         self.next_link_id = self.next_link_id.wrapping_add(1);
@@ -2389,7 +2389,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn try_modifiers_change(
         &mut self,
         modifiers: &Modifiers,
@@ -2410,7 +2410,7 @@ impl Terminal {
         self.input(paste_text.into_bytes());
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let term = self.term.clone();
         let mut terminal = term.lock_unfair();
@@ -2460,7 +2460,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn mouse_changed(&mut self, point: Point, side: SelectionSide) -> bool {
         match self.last_mouse {
             Some((old_point, old_side)) => {
@@ -2482,7 +2482,7 @@ impl Terminal {
         self.last_content.mode.intersects(Modes::MOUSE_MODE) && !shift
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<Self>) {
         let position = e.position - self.last_content.terminal_bounds.bounds.origin;
         if self.mouse_mode(e.modifiers.shift) {
@@ -2518,7 +2518,7 @@ impl Terminal {
         cx.notify();
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn schedule_find_hyperlink(
         &mut self,
         modifiers: Modifiers,
@@ -2568,7 +2568,7 @@ impl Terminal {
         cx.notify();
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn select_word_at_event_position(&mut self, e: &MouseDownEvent) {
         let position = e.position - self.last_content.terminal_bounds.bounds.origin;
         let (point, side) = grid_point_and_side(
@@ -2581,7 +2581,7 @@ impl Terminal {
             .push_back(InternalEvent::SetSelection(Some(selection)));
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_drag(
         &mut self,
         e: &MouseMoveEvent,
@@ -2635,7 +2635,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn drag_line_delta(&self, e: &MouseMoveEvent, region: Bounds<Pixels>) -> Option<i32> {
         let top = region.origin.y;
         let bottom = region.bottom_left().y;
@@ -2653,7 +2653,7 @@ impl Terminal {
         Some(scroll_lines.clamp(-3, 3))
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_down(&mut self, e: &MouseDownEvent, cx: &mut Context<Self>) {
         let position = e.position - self.last_content.terminal_bounds.bounds.origin;
         let point = grid_point(
@@ -2735,7 +2735,7 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn mouse_up(&mut self, e: &MouseUpEvent, cx: &Context<Self>) {
         let setting = TerminalSettings::get_global(cx);
 
@@ -2809,7 +2809,7 @@ impl Terminal {
     }
 
     ///Scroll the terminal
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn scroll_wheel(&mut self, e: &ScrollWheelEvent, scroll_multiplier: f32) {
         let mouse_mode = self.mouse_mode(e.shift);
         let scroll_multiplier = if mouse_mode { 1. } else { scroll_multiplier };
@@ -2844,12 +2844,12 @@ impl Terminal {
         }
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn refresh_hovered_word(&mut self, window: &Window, cx: &mut Context<Self>) {
         self.schedule_find_hyperlink(window.modifiers(), window.mouse_position(), cx);
     }
 
-#[cfg(any(test, feature = "ui"))]
+#[cfg(feature = "ui")]
     fn determine_scroll_lines(
         &mut self,
         e: &ScrollWheelEvent,
