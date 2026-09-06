@@ -27,7 +27,7 @@ The first two modes run without actus and without a python runtime.
   loads or creates an AcpThread and runs the turn. Events such as
   message_added and message_completed are emitted through a sync event
   sink that the websocket consumes.
-- A deterministic fake provider exists behind TELOS_FAKE_BACKEND, and the
+- A deterministic stub provider exists behind TELOS_STUB_BACKEND, and the
   real providers initialize from settings that actus injects today.
 
 ## Design

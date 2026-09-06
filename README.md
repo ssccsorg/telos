@@ -36,8 +36,8 @@ with this binary attached either way.
 
 - `crates/telos`: the single binary over the agent core (wire types,
   agent loop, and the `tel` entrypoint in one crate)
-- `VENDORING.md`: vendored zed derivation record (pinned base commit) and the
-  version-level absorb procedure
+- `VENDORING.md`: zed sync and derivation record; insight-mapping port
+  procedure with the pinned base commit and current divergences
 - `docs/upstream-sync.md`: upstream knowledge synchronization process
 - `index.qmd`: project documentation at the SSCCS index level
 

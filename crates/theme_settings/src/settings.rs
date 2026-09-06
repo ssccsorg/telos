@@ -5,7 +5,7 @@ use crate::{merge_accent_colors, merge_player_colors};
 use collections::HashMap;
 use gpui::{
     App, Context, Font, FontFallbacks, FontStyle, Global, Pixels, SharedString, Subscription,
-    Window, px,
+    px,
 };
 use refineable::Refineable;
 use schemars::JsonSchema;
@@ -584,18 +584,6 @@ pub fn reset_buffer_font_size(cx: &mut App) {
 }
 
 #[allow(missing_docs)]
-pub fn setup_ui_font(window: &mut Window, cx: &mut App) -> gpui::Font {
-    let (ui_font, ui_font_size) = {
-        let theme_settings = ThemeSettings::get_global(cx);
-        let font = theme_settings.ui_font.clone();
-        (font, theme_settings.ui_font_size(cx))
-    };
-
-    window.set_rem_size(ui_font_size);
-    ui_font
-}
-
-/// Sets the adjusted UI font size.
 pub fn adjust_ui_font_size(cx: &mut App, f: impl FnOnce(Pixels) -> Pixels) {
     let ui_font_size = ThemeSettings::get_global(cx).ui_font_size(cx);
     let adjusted_size = cx

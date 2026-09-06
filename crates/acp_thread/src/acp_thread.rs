@@ -22,6 +22,18 @@ use language::{
 };
 pub use mention::*;
 
+/// Initial scroll position of the thread view, set during session
+/// registration and restored by the attaching UI. Mirrors the gpui list
+/// offset shape with the gpui element type removed from the headless
+/// surface.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ListOffset {
+    /// The index of an item in the thread list.
+    pub item_ix: usize,
+    /// The number of pixels to offset from the item index.
+    pub offset_in_item: gpui::Pixels,
+}
+
 /// Textual message content. The headless graph never renders markdown, so
 /// message content is carried as plain text instead of the rendering
 /// `markdown::Markdown` component.
@@ -2131,7 +2143,7 @@ pub struct AcpThread {
     /// The user's unsent prompt text, persisted so it can be restored when reloading the thread.
     draft_prompt: Option<Vec<acp::ContentBlock>>,
     /// The initial scroll position for the thread view, set during session registration.
-    ui_scroll_position: Option<gpui::ListOffset>,
+    ui_scroll_position: Option<ListOffset>,
     /// Buffer for smooth text streaming. Holds text that has been received from
     /// the model but not yet revealed in the UI. A timer task drains this buffer
     /// gradually to create a fluid typing effect instead of choppy chunk-at-a-time
@@ -2376,11 +2388,11 @@ impl AcpThread {
         self.draft_prompt = prompt;
     }
 
-    pub fn ui_scroll_position(&self) -> Option<gpui::ListOffset> {
+    pub fn ui_scroll_position(&self) -> Option<ListOffset> {
         self.ui_scroll_position
     }
 
-    pub fn set_ui_scroll_position(&mut self, position: Option<gpui::ListOffset>) {
+    pub fn set_ui_scroll_position(&mut self, position: Option<ListOffset>) {
         self.ui_scroll_position = position;
     }
 

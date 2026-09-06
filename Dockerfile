@@ -6,7 +6,7 @@
 #   - libfontconfig-dev: yeslogic-fontconfig-sys (resvg/system-fonts)
 #   - cmake: aws-lc-sys (rustls provider)
 #   - build-essential + pkg-config: vendored C/C++ build scripts
-#   - python3: actus conformance runner (e2e-fake tier)
+#   - python3: actus conformance runner (e2e-stub tier)
 # Everything else in zed's list (wayland, x11, alsa, libgit2, sqlite,
 # clang/lld, musl, webrtc extras) belongs to stacks this workspace prunes.
 
@@ -41,6 +41,6 @@ RUN cargo check --workspace \
     && cargo test -p telos \
     && rm -rf /workspace/target
 
-# The agent binary used by the deterministic conformance tier (e2e-fake).
+# The agent binary used by the deterministic conformance tier (e2e-stub).
 FROM env AS tel
 RUN cargo build --profile telos-release -p telos

@@ -10053,7 +10053,6 @@ dependencies = [
  "fs",
  "futures",
  "gpui",
- "gpui_platform",
  "http_client",
  "language",
  "language_model",

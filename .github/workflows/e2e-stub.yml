@@ -1,17 +1,17 @@
-name: Telos fake E2E (manual)
+name: Telos stub E2E (manual)
 
 on:
   workflow_dispatch:
 
 concurrency:
-  group: telos-e2e-fake
+  group: telos-e2e-stub
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  e2e-fake:
+  e2e-stub:
     runs-on: ubuntu-latest
     steps:
       - name: Require the actus PAT
@@ -43,11 +43,11 @@ jobs:
             -t telos:tel \
             telos
 
-      - name: Deterministic conformance (fake backend, no LLM)
+      - name: Deterministic conformance (stub backend, no LLM)
         run: |
           docker run --rm \
             -e TELOS_BIN=/workspace/target/telos-release/tel \
             -v "$GITHUB_WORKSPACE/actus:/workspace/actus" \
             -w /workspace/actus \
             telos:tel \
-            bash run.sh --scenarios-fake
+            bash run.sh --scenarios-stub

@@ -1,6 +1,7 @@
 use crate::{DevicePixels, Pixels, Result, SharedString, Size, size};
 use smallvec::SmallVec;
 
+#[cfg(feature = "ui")]
 use image::{Delay, Frame};
 use std::{
     borrow::Cow,
@@ -30,16 +31,19 @@ impl AssetSource for () {
 
 /// A unique identifier for the image cache
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg(feature = "ui")]
 pub struct ImageId(pub usize);
 
 #[derive(PartialEq, Eq, Hash, Clone)]
 #[expect(missing_docs)]
+#[cfg(feature = "ui")]
 pub struct RenderImageParams {
     pub image_id: ImageId,
     pub frame_index: usize,
 }
 
 /// A cached and processed image, in BGRA format
+#[cfg(feature = "ui")]
 pub struct RenderImage {
     /// The ID associated with this image
     pub id: ImageId,
@@ -48,14 +52,17 @@ pub struct RenderImage {
     data: SmallVec<[Frame; 1]>,
 }
 
+#[cfg(feature = "ui")]
 impl PartialEq for RenderImage {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
+#[cfg(feature = "ui")]
 impl Eq for RenderImage {}
 
+#[cfg(feature = "ui")]
 impl RenderImage {
     /// Create a new image from the given data.
     pub fn new(data: impl Into<SmallVec<[Frame; 1]>>) -> Self {
@@ -106,6 +113,7 @@ impl RenderImage {
     }
 }
 
+#[cfg(feature = "ui")]
 impl fmt::Debug for RenderImage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ImageData")

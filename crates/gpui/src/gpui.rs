@@ -28,24 +28,16 @@ pub(crate) use platform_scheduler::PlatformScheduler;
 mod geometry;
 mod gestures;
 mod global;
-mod input;
 mod inspector;
 mod interactive;
 mod key_dispatch;
 mod keymap;
-mod path_builder;
 mod platform;
 pub mod prelude;
 /// Profiling utilities for task, frame, and thread performance tracking.
 pub mod profiler;
-#[cfg(any(
-    test,
-    target_os = "windows",
-    target_os = "linux",
-    target_family = "wasm",
-    feature = "test-support",
-    feature = "bench-support"
-))]
+// Priority queue used by the always-compiled `threaded_dispatcher` (headless
+// run loops) and by platform dispatchers. Compiled on every platform.
 #[expect(missing_docs)]
 pub mod queue;
 mod scene;
@@ -54,6 +46,7 @@ mod spring;
 mod style;
 mod styled;
 mod subscription;
+#[cfg(feature = "ui")]
 mod svg_renderer;
 mod tab_stop;
 mod taffy;
@@ -138,12 +131,10 @@ macro_rules! bench_main {
 pub use gpui_shared_string::*;
 pub use gpui_util::arc_cow::ArcCow;
 pub use http_client;
-pub use input::*;
 pub use inspector::*;
 pub use interactive::*;
 use key_dispatch::*;
 pub use keymap::*;
-pub use path_builder::*;
 pub use platform::*;
 pub use profiler::*;
 #[cfg(any(target_os = "windows", target_os = "linux", target_family = "wasm"))]
@@ -155,6 +146,7 @@ use std::{any::Any, future::Future};
 pub use style::*;
 pub use styled::*;
 pub use subscription::*;
+#[cfg(feature = "ui")]
 pub use svg_renderer::*;
 pub(crate) use tab_stop::*;
 use taffy::TaffyLayoutEngine;

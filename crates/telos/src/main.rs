@@ -6,7 +6,7 @@
 //! include those crates, so a binary rooted here excludes them from the
 //! build entirely.
 
-mod fake_backend;
+mod stub_backend;
 
 use std::sync::Arc;
 
@@ -54,7 +54,10 @@ fn main() {
         return;
     }
 
-    let app = Application::with_platform(gpui_platform::current_platform(true));
+    // Headless runtime: gpui::HeadlessPlatform over ThreadedDispatcher. The
+    // windowed platform backends (gpui_macos/gpui_linux via gpui_platform) are
+    // deliberately out of the agent graph (issue #3).
+    let app = Application::with_platform(gpui::HeadlessPlatform::new());
     app.run(move |cx| {
         if let Err(e) = run_headless(cx) {
             log::error!("telos: {e:#}");
@@ -99,13 +102,13 @@ fn run_headless(cx: &mut App) -> Result<()> {
     // Deterministic test backend: respond to every prompt with a fixed
     // message so the actus contract can be verified without an LLM API key
     // and without model variance. When active, skip the real providers so
-    // the fake is the only authenticated provider.
-    let fake_backend = std::env::var("TELOS_FAKE_BACKEND").is_ok();
-    if fake_backend {
+    // the stub is the only authenticated provider.
+    let stub_backend = std::env::var("TELOS_STUB_BACKEND").is_ok();
+    if stub_backend {
         use language_model::LanguageModelRegistry;
-        let fake = Arc::new(crate::fake_backend::FakeBackendProvider::default());
+        let stub = Arc::new(crate::stub_backend::StubBackendProvider::default());
         LanguageModelRegistry::global(cx).update(cx, |registry, cx| {
-            registry.register_provider(fake, cx);
+            registry.register_provider(stub, cx);
             registry.set_should_use_fallback(true);
         });
     } else {

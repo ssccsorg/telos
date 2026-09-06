@@ -340,6 +340,42 @@ impl ThreadedDispatcher {
         ran_any
     }
 
+    /// Wakes a main thread parked in [`Self::run_until`] or
+    /// [`Self::wait_for_main_work`], for example to deliver a quit request
+    /// from another thread. The wake is spurious in condvar terms: the caller
+    /// changes its own state and the run loop re-checks when it wakes.
+    pub fn wake_main(&self) {
+        let _inflight = self.idle.inflight.lock();
+        self.idle.condvar.notify_all();
+    }
+
+    /// Parks until a main-thread runnable is queued or a notification arrives
+    /// (background or timer completion that may dispatch to main, an external
+    /// [`Self::wake_main`]). Returns on any wake; callers re-check their own
+    /// state, so spurious wakes are fine. This is the blocking primitive of a
+    /// headless run loop: park here, then drain with
+    /// [`Self::run_ready_main_tasks`]. Must be called on the dispatcher's
+    /// main thread.
+    pub fn wait_for_main_work(&self) {
+        assert!(
+            self.is_main_thread(),
+            "wait_for_main_work must be called on the threaded dispatcher's main thread"
+        );
+        loop {
+            if self.main_queue_has_work() {
+                return;
+            }
+            let mut inflight = self.idle.inflight.lock();
+            // Re-checked under the lock that dispatch and completion notify
+            // under, so a notification between the check and the wait cannot
+            // be lost.
+            if self.main_queue_has_work() {
+                return;
+            }
+            self.idle.condvar.wait(&mut inflight);
+        }
+    }
+
     /// Cancels all pending timers so timers armed by one workload can't fire
     /// during a later workload sharing this process-lifetime dispatcher.
     ///
@@ -457,6 +493,7 @@ impl PlatformDispatcher for ThreadedDispatcher {
             .expect("failed to spawn threaded dispatcher realtime thread");
     }
 
+    #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
     fn as_threaded(&self) -> Option<&ThreadedDispatcher> {
         Some(self)
     }

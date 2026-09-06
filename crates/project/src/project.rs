@@ -87,7 +87,7 @@ use image_store::{ImageItemEvent, ImageStoreEvent};
 use ::git::{blame::Blame, status::FileStatus};
 use gpui::{
     App, AppContext, AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, Hsla, SharedString,
-    Task, TaskExt, WeakEntity, Window,
+    Task, TaskExt, WeakEntity,
 };
 use language::{
     Buffer, BufferEditSource, BufferEvent, Capability, CodeLabel, CursorShape, DiskState, Language,
@@ -588,11 +588,6 @@ pub struct Completion {
     pub snippet_deduplication_key: Option<(usize, usize)>,
     /// Whether to adjust indentation (the default) or not.
     pub insert_text_mode: Option<InsertTextMode>,
-    /// An optional callback to invoke when this completion is confirmed.
-    /// Returns whether new completions should be retriggered after the current one.
-    /// If `true` is returned, the editor will show a new completion menu after this completion is confirmed.
-    /// if no confirmation is provided or `false` is returned, the completion will be committed.
-    pub confirm: Option<Arc<dyn Send + Sync + Fn(CompletionIntent, &mut Window, &mut App) -> bool>>,
     /// An optional group for this completion. When the group changes between consecutive
     /// items, the completion menu inserts a divider. If the group also carries a label,
     /// a non-selectable header row is rendered below the divider.

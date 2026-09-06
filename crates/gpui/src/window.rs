@@ -5,7 +5,8 @@ use crate::Inspector;
 #[cfg(feature = "profiler")]
 use crate::profiler;
 use crate::{
-    Action, AnyDrag, AnyElement, AnyImageCache, AnyTooltip, AnyView, App, AppContext, Arena, Asset,
+    Action, AnyDrag, AnyElement, AnyImageCache, AnyTooltip, AnyView, AnyWindowHandle, App,
+    AppContext, Arena, Asset,
     AsyncWindowContext, AtlasTile, AvailableSpace, Background, BorderStyle, Bounds, BoxShadow,
     Capslock, Context, Corners, CursorHideMode, CursorStyle, Decorations, DevicePixels,
     DispatchActionListener, DispatchNodeId, DispatchTree, DisplayId, Edges, Effect, Entity,
@@ -21,8 +22,8 @@ use crate::{
     SystemWindowTabController, TabStopMap, TaffyLayoutEngine, Task, TextInputConfiguration,
     TextRenderingMode, TextStyle, TextStyleRefinement, ThermalState, TransformationMatrix,
     Underline, UnderlineStyle, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
-    WindowControls, WindowDecorations, WindowOptions, WindowParams, WindowTextSystem, point,
-    prelude::*, px, rems, size, transparent_black,
+    WindowControls, WindowDecorations, WindowId, WindowOptions, WindowParams, WindowTextSystem,
+    point, prelude::*, px, rems, size, transparent_black,
 };
 
 use crate::gestures::{GestureTuning, RecognizedTouchGesture, TouchGestureRecognizer};
@@ -6475,25 +6476,6 @@ impl Window {
     }
 }
 
-// #[derive(Clone, Copy, Eq, PartialEq, Hash)]
-slotmap::new_key_type! {
-    /// A unique identifier for a window.
-    pub struct WindowId;
-}
-
-impl WindowId {
-    /// Converts this window ID to a `u64`.
-    pub fn as_u64(&self) -> u64 {
-        self.0.as_ffi()
-    }
-}
-
-impl From<u64> for WindowId {
-    fn from(value: u64) -> Self {
-        WindowId(slotmap::KeyData::from_ffi(value))
-    }
-}
-
 /// A handle to a window with a specific root view type.
 /// Note that this does not keep the window alive on its own.
 #[derive(Deref, DerefMut)]
@@ -6638,24 +6620,7 @@ impl<V: 'static> From<WindowHandle<V>> for AnyWindowHandle {
     }
 }
 
-/// A handle to a window with any root view type, which can be downcast to a window with a specific root view type.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct AnyWindowHandle {
-    pub(crate) id: WindowId,
-    state_type: TypeId,
-    root_entity_type_name: &'static str,
-}
-
 impl AnyWindowHandle {
-    /// Get the ID of this window.
-    pub fn window_id(&self) -> WindowId {
-        self.id
-    }
-
-    /// Returns the name of the window's declared root entity type.
-    pub fn root_entity_type_name(&self) -> &'static str {
-        self.root_entity_type_name
-    }
 
     /// Attempt to convert this handle to a window handle with a specific root view type.
     /// If the types do not match, this will return `None`.

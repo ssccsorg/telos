@@ -15,8 +15,8 @@ use derive_more::Deref;
 use feature_flags::FeatureFlagAppExt;
 use futures::{Future, StreamExt, channel::mpsc};
 use gpui::{
-    App, AppContext as _, AsyncApp, Context, Entity, EventEmitter, SharedString, SharedUri, Task,
-    TaskExt, WeakEntity,
+    App, AppContext as _, AsyncApp, Context, Entity, EventEmitter, SharedString, Task, TaskExt,
+    WeakEntity,
 };
 use http_client::http::{HeaderMap, HeaderValue};
 use postage::{sink::Sink, watch};
@@ -57,7 +57,6 @@ pub struct ParticipantIndex(pub u32);
 pub struct User {
     pub legacy_id: LegacyUserId,
     pub username: SharedString,
-    pub avatar_uri: SharedUri,
     pub name: Option<String>,
 }
 
@@ -238,7 +237,6 @@ impl UserStore {
                                     let user = Arc::new(User {
                                         legacy_id: user_id,
                                         username: response.user.username.clone().into(),
-                                        avatar_uri: response.user.avatar_url.clone().into(),
                                         name: response.user.name.clone(),
                                     });
 
@@ -1009,7 +1007,6 @@ impl User {
         Arc::new(User {
             legacy_id: message.id,
             username: message.username.into(),
-            avatar_uri: message.avatar_url.into(),
             name: message.name,
         })
     }

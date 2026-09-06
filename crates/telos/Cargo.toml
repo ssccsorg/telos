@@ -17,8 +17,7 @@ agent_settings.workspace = true
 external_websocket_sync.workspace = true
 project.workspace = true
 fs.workspace = true
-gpui.workspace = true
-gpui_platform.workspace = true
+gpui = { workspace = true, features = ["ui"] }
 language_model.workspace = true
 language_models.workspace = true
 prompt_store.workspace = true
