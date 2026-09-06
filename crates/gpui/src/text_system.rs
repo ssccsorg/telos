@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Bounds, DevicePixels, Hsla, Pixels, PlatformTextSystem, Point, Result, SharedString, Size,
-    StrikethroughStyle, TextRenderingMode, UnderlineStyle, px,
+    TextRenderingMode, px,
 };
 use anyhow::{Context as _, anyhow};
 use collections::FxHashMap;
@@ -447,32 +447,6 @@ pub enum FontStyle {
 impl Display for FontStyle {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         Debug::fmt(self, f)
-    }
-}
-
-/// A styled run of text, for use in [`crate::TextLayout`].
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct TextRun {
-    /// A number of utf8 bytes
-    pub len: usize,
-    /// The font to use for this run.
-    pub font: Font,
-    /// The color
-    pub color: Hsla,
-    /// The background color (if any)
-    pub background_color: Option<Hsla>,
-    /// The underline style (if any)
-    pub underline: Option<UnderlineStyle>,
-    /// The strikethrough style (if any)
-    pub strikethrough: Option<StrikethroughStyle>,
-}
-
-#[cfg(all(target_os = "macos", test))]
-impl TextRun {
-    fn with_len(&self, len: usize) -> Self {
-        let mut this = self.clone();
-        this.len = len;
-        this
     }
 }
 
