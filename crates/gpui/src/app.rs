@@ -42,7 +42,6 @@ pub use test_context::*;
 pub use visual_test_context::*;
 
 #[cfg(any(feature = "inspector", debug_assertions))]
-use crate::InspectorElementRegistry;
 use crate::{
     Action, ActionBuildError, ActionRegistry, Any, AnyView, AnyWindowHandle, AppContext, Arena,
     ArenaBox, Asset, AssetSource, BackgroundExecutor, Bounds, ClipboardItem, ClipboardReadError,
@@ -750,10 +749,6 @@ pub struct App {
         FxHashMap<EntityId, FxHashMap<WindowId, WindowInvalidator>>,
     pub(crate) tracked_entities: FxHashMap<WindowId, FxHashSet<EntityId>>,
     pub(crate) current_window_by_entity: FxHashMap<EntityId, WindowId>,
-    #[cfg(any(feature = "inspector", debug_assertions))]
-    pub(crate) inspector_renderer: Option<crate::InspectorRenderer>,
-    #[cfg(any(feature = "inspector", debug_assertions))]
-    pub(crate) inspector_element_registry: InspectorElementRegistry,
     #[cfg(any(test, feature = "test-support", debug_assertions))]
     pub(crate) name: Option<&'static str>,
     pub(crate) text_rendering_mode: Rc<Cell<TextRenderingMode>>,
@@ -858,10 +853,6 @@ impl App {
                 layout_id_buffer: Default::default(),
                 propagate_event: true,
                 prompt_builder: Some(PromptBuilder::Default),
-                #[cfg(any(feature = "inspector", debug_assertions))]
-                inspector_renderer: None,
-                #[cfg(any(feature = "inspector", debug_assertions))]
-                inspector_element_registry: InspectorElementRegistry::default(),
                 quit_mode: QuitMode::default(),
                 quitting: false,
                 cursor_hide_mode: CursorHideMode::default(),
@@ -2751,21 +2742,6 @@ impl App {
         }
     }
 
-    /// Sets the renderer for the inspector.
-    #[cfg(any(feature = "inspector", debug_assertions))]
-    pub fn set_inspector_renderer(&mut self, f: crate::InspectorRenderer) {
-        self.inspector_renderer = Some(f);
-    }
-
-    /// Registers a renderer specific to an inspector state.
-    #[cfg(any(feature = "inspector", debug_assertions))]
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
-    pub fn register_inspector_element<T: 'static, R: crate::IntoElement>(
-        &mut self,
-        f: impl 'static + Fn(crate::InspectorElementId, &T, &mut Window, &mut App) -> R,
-    ) {
-        self.inspector_element_registry.register(f);
-    }
 
     /// Initializes gpui's default colors for the application.
     ///

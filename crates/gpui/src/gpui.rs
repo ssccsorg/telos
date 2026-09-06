@@ -31,7 +31,6 @@ mod geometry;
 #[cfg(feature = "ui")]
 mod gestures;
 mod global;
-mod inspector;
 #[cfg(feature = "ui")]
 mod interactive;
 #[cfg(feature = "ui")]
@@ -146,7 +145,6 @@ macro_rules! bench_main {
 pub use gpui_shared_string::*;
 pub use gpui_util::arc_cow::ArcCow;
 pub use http_client;
-pub use inspector::*;
 #[cfg(feature = "ui")]
 pub use interactive::*;
 #[cfg(feature = "ui")]
