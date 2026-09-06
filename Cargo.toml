@@ -494,12 +494,6 @@ reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "33bc76
     "socks",
     "stream",
 ], package = "zed-reqwest", version = "0.12.15-zed" }
-resvg = { version = "0.46.0", default-features = false, features = [
-    "text",
-    "system-fonts",
-    "memmap-fonts",
-    "raster-images",
-] }
 rsa = "0.9.6"
 runtimelib = { version = "1.4.0", default-features = false, features = [
     "async-dispatcher-runtime", "aws-lc-rs"
@@ -696,7 +690,6 @@ tree-sitter-language = { git = "https://github.com/tree-sitter/tree-sitter", rev
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
 async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
 windows-capture = { git = "https://github.com/zed-industries/windows-capture.git", rev = "f0d6c1b6691db75461b732f6d5ff56eed002eeb9" }
-calloop = { git = "https://github.com/zed-industries/calloop" }
 notify = { git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991" }
 notify-types = { git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991" }
 
@@ -735,8 +728,6 @@ proc-macro2 = { opt-level = 3 }
 # proc-macros end
 
 tree-sitter = { opt-level = 3 }
-taffy = { opt-level = 3 }
-resvg = { opt-level = 3 }
 wasmtime = { opt-level = 3 }
 cranelift-codegen = { opt-level = 3 }
 wasmtime-environ = { opt-level = 3 }

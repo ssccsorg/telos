@@ -110,25 +110,7 @@ impl Arena {
         self.chunks.len() * self.chunk_size.get()
     }
 
-    /// Marks the start of a scope (e.g. a window draw) whose allocations must stay
-    /// live until the scope ends, even if `clear` is called by a nested scope in
-    /// the meantime.
-    pub fn begin_scope(&mut self) {
-        self.scope_depth += 1;
-    }
 
-    /// Ends the innermost scope started with `begin_scope`.
-    ///
-    /// Panics if no scope is active: an unbalanced `end_scope` would let `clear`
-    /// run while an enclosing scope still references arena memory, which is
-    /// exactly the use-after-free this bookkeeping exists to prevent, so failing
-    /// loudly here is preferable.
-    pub fn end_scope(&mut self) {
-        self.scope_depth = self
-            .scope_depth
-            .checked_sub(1)
-            .expect("Arena::end_scope called without a matching begin_scope");
-    }
 
     /// Drops all allocations and resets the arena, unless a scope is still active.
     ///

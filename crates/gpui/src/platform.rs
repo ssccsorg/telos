@@ -15,12 +15,6 @@ mod threaded_dispatcher;
 
 mod headless;
 
-#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
-mod test;
-
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
-mod visual_test;
-
 #[cfg(all(
     feature = "screen-capture",
     any(target_os = "windows", target_os = "linux", target_os = "freebsd",)

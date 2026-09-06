@@ -1,4 +1,3 @@
-use scheduler::Instant;
 use std::{
     any::{TypeId, type_name},
     cell::{BorrowMutError, Cell, Ref, RefCell, RefMut},
@@ -20,22 +19,12 @@ use futures::{
 };
 
 pub use async_context::*;
-#[cfg(feature = "bench-support")]
-pub use bench_context::{BenchAppContext, BenchReport, BenchWindowContext, bench_platform};
 use collections::{FxHashMap, FxHashSet, HashMap, TypeIdHashMap, TypeIdHashSet, VecDeque};
 pub use context::*;
 pub use entity_map::*;
 use gpui_util::debug_panic;
-#[cfg(any(test, feature = "test-support"))]
-pub use headless_app_context::*;
 use http_client::{HttpClient, Url};
 use smallvec::SmallVec;
-#[cfg(any(test, feature = "test-support"))]
-pub use test_app::*;
-#[cfg(any(test, feature = "test-support"))]
-pub use test_context::*;
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
-pub use visual_test_context::*;
 
 use crate::{
     Action, ActionBuildError, ActionRegistry, Any, AnyWindowHandle, AppContext, Arena, ArenaBox,
@@ -52,18 +41,8 @@ use crate::{
 use crate::{RenderImage, SvgRenderer};
 
 mod async_context;
-#[cfg(feature = "bench-support")]
-mod bench_context;
 mod context;
 mod entity_map;
-#[cfg(any(test, feature = "test-support"))]
-mod headless_app_context;
-#[cfg(any(test, feature = "test-support"))]
-mod test_app;
-#[cfg(any(test, feature = "test-support"))]
-mod test_context;
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
-mod visual_test_context;
 
 /// The duration for which futures returned from [Context::on_app_quit] can run before the application fully quits.
 pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(200);
@@ -338,32 +317,6 @@ pub enum CursorHideMode {
     OnTypingAndAction,
 }
 
-pub(crate) enum GpuiMode {
-    #[cfg(any(test, feature = "test-support"))]
-    Test {
-        skip_drawing: bool,
-    },
-    Production,
-}
-
-impl GpuiMode {
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn test() -> Self {
-        GpuiMode::Test {
-            skip_drawing: false,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn skip_drawing(&self) -> bool {
-        match self {
-            #[cfg(any(test, feature = "test-support"))]
-            GpuiMode::Test { skip_drawing } => *skip_drawing,
-            GpuiMode::Production => false,
-        }
-    }
-}
-
 /// Contains the state of the full application, and passed as a reference to a variety of callbacks.
 /// Other [Context] derefs to this type.
 /// You need a reference to an `App` to access the state of a [Entity].
@@ -398,7 +351,6 @@ pub struct App {
 
     /// Per-App element arena. This isolates element allocations between different
     /// App instances (important for tests where multiple Apps run concurrently).
-    pub(crate) element_arena: RefCell<Arena>,
     /// Per-App event arena.
     pub(crate) event_arena: Arena,
 
@@ -425,7 +377,6 @@ pub struct App {
     pub(crate) cursor_hide_mode: CursorHideMode,
     pub(crate) reduce_motion: bool,
     /// Origin of the shared clock that phase-locks synced repeating animations.
-    pub(crate) synced_animation_epoch: Instant,
     /// Whether the app was created by [`Application::new_inaccessible`]. No
     /// accesskit APIs will be called when this flag is set.
     pub(crate) accessibility_force_disabled: bool,
@@ -455,7 +406,6 @@ impl App {
         );
         #[cfg(feature = "profiler")]
         let foreground_journal = crate::profiler::journal::install_foreground_journal();
-        let synced_animation_epoch = background_executor.now();
 
         let text_system = Arc::new(TextSystem::new(platform.text_system()));
         let entities = EntityMap::new();
@@ -510,9 +460,7 @@ impl App {
                 quitting: false,
                 cursor_hide_mode: CursorHideMode::default(),
                 reduce_motion: false,
-                synced_animation_epoch,
                 accessibility_force_disabled: false,
-                element_arena: RefCell::new(Arena::new(1024 * 1024)),
                 event_arena: Arena::new(1024 * 1024),
 
                 #[cfg(any(test, feature = "leak-detection"))]
@@ -742,22 +690,6 @@ impl App {
             on_notify(e, cx);
             true
         })
-    }
-
-    pub(crate) fn detect_accessed_entities<R>(
-        &mut self,
-        callback: impl FnOnce(&mut App) -> R,
-    ) -> (R, FxHashSet<EntityId>) {
-        let accessed_entities_start = self.entities.accessed_entities.get_mut().clone();
-        let result = callback(self);
-        let entities_accessed_in_callback = self
-            .entities
-            .accessed_entities
-            .get_mut()
-            .difference(&accessed_entities_start)
-            .copied()
-            .collect::<FxHashSet<EntityId>>();
-        (result, entities_accessed_in_callback)
     }
 
     pub(crate) fn new_observer(&mut self, key: EntityId, value: Handler) -> Subscription {

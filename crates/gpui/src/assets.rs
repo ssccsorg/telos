@@ -1,14 +1,7 @@
-use crate::{DevicePixels, Pixels, Result, SharedString, Size, size};
-use smallvec::SmallVec;
-
+use crate::{Result, SharedString};
 #[cfg(feature = "ui")]
 use image::{Delay, Frame};
-use std::{
-    borrow::Cow,
-    fmt,
-    hash::Hash,
-    sync::atomic::{AtomicUsize, Ordering::SeqCst},
-};
+use std::borrow::Cow;
 
 /// A source of assets for this app to use.
 pub trait AssetSource: 'static + Send + Sync {
