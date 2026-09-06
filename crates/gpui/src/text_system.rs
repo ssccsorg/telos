@@ -8,10 +8,7 @@ pub use line_layout::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    Bounds, DevicePixels, Hsla, Pixels, PlatformTextSystem, Point, Result, SharedString, Size,
-    TextRenderingMode, px,
-};
+use crate::{Bounds, Pixels, PlatformTextSystem, Point, Result, SharedString, Size, px};
 use anyhow::{Context as _, anyhow};
 use collections::FxHashMap;
 use core::fmt;
@@ -46,7 +43,6 @@ pub struct TextSystem {
     platform_text_system: Arc<dyn PlatformTextSystem>,
     font_ids_by_font: RwLock<FxHashMap<Font, Result<FontId>>>,
     font_metrics: RwLock<FxHashMap<FontId, FontMetrics>>,
-    raster_bounds: RwLock<FxHashMap<RenderGlyphParams, Bounds<DevicePixels>>>,
     fallback_font_stack: SmallVec<[Font; 2]>,
 }
 
@@ -56,7 +52,6 @@ impl TextSystem {
         TextSystem {
             platform_text_system,
             font_metrics: RwLock::default(),
-            raster_bounds: RwLock::default(),
             font_ids_by_font: RwLock::default(),
             fallback_font_stack: smallvec![
                 // TODO: Remove this when Linux have implemented setting fallbacks.
@@ -309,43 +304,6 @@ impl TextSystem {
         }
     }
 
-    /// Get the rasterized size and location of a specific, rendered glyph.
-    pub(crate) fn raster_bounds(&self, params: &RenderGlyphParams) -> Result<Bounds<DevicePixels>> {
-        let raster_bounds = self.raster_bounds.upgradable_read();
-        if let Some(bounds) = raster_bounds.get(params) {
-            Ok(*bounds)
-        } else {
-            let mut raster_bounds = RwLockUpgradableReadGuard::upgrade(raster_bounds);
-            let bounds = self.platform_text_system.glyph_raster_bounds(params)?;
-            raster_bounds.insert(params.clone(), bounds);
-            Ok(bounds)
-        }
-    }
-
-    pub(crate) fn rasterize_glyph(
-        &self,
-        params: &RenderGlyphParams,
-    ) -> Result<(Size<DevicePixels>, Vec<u8>)> {
-        let raster_bounds = self.raster_bounds(params)?;
-        self.platform_text_system
-            .rasterize_glyph(params, raster_bounds)
-    }
-
-    /// Returns the dilation level to use for a glyph painted in the given color.
-    pub(crate) fn glyph_dilation_for_color(&self, color: Hsla) -> u8 {
-        self.platform_text_system.glyph_dilation_for_color(color)
-    }
-
-    /// Returns the text rendering mode recommended by the platform for the given font and size.
-    /// The return value will never be [`TextRenderingMode::PlatformDefault`].
-    pub(crate) fn recommended_rendering_mode(
-        &self,
-        font_id: FontId,
-        font_size: Pixels,
-    ) -> TextRenderingMode {
-        self.platform_text_system
-            .recommended_rendering_mode(font_id, font_size)
-    }
 }
 
 /// The degree of blackness or stroke thickness of a font. This value ranges from 100.0 to 900.0,
