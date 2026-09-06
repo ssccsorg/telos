@@ -6,7 +6,7 @@ pub use crate::{
     AppContext as _, BorrowAppContext, Context, IntoElement, Refineable, Render, TaskExt as _,
     util::FluentBuilder,
 };
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
 pub use crate::VisualContext;
 #[cfg(feature = "ui")]
 pub use crate::StyledImage;

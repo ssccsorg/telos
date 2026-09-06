@@ -298,7 +298,7 @@ pub trait Platform: 'static {
     /// The platform's gesture recognition services, if it provides any
     /// beyond gpui's portable recognizers. See
     /// [`PlatformGestures`](crate::PlatformGestures).
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn gestures(&self) -> Option<Rc<dyn PlatformGestures>> {
         None
     }
@@ -927,29 +927,29 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn frame_waker(&self) -> Option<Rc<dyn Fn()>> {
         None
     }
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> DispatchEventResult>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_active_status_change(&self, callback: Box<dyn FnMut(bool)>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_hover_status_change(&self, callback: Box<dyn FnMut(bool)>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_resize(&self, callback: Box<dyn FnMut(Size<Pixels>, f32)>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_moved(&self, callback: Box<dyn FnMut()>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_should_close(&self, callback: Box<dyn FnMut() -> bool>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_hit_test_window_control(&self, callback: Box<dyn FnMut() -> Option<WindowControlArea>>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_close(&self, callback: Box<dyn FnOnce()>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_appearance_changed(&self, callback: Box<dyn FnMut()>);
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn on_button_layout_changed(&self, _callback: Box<dyn FnMut()>) {}
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn draw(&self, scene: &Scene);
     fn schedule_frame(&self) {}
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
@@ -995,7 +995,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn can_start_external_drag(&self) -> bool {
         false
     }
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn start_external_drag(&self, _payload: &ExternalDragPayload) -> bool {
         false
     }
@@ -1062,7 +1062,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     /// Inform the adapter of updated window bounds.
     fn a11y_update_window_bounds(&self) {}
 
-    #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+    #[cfg(feature = "ui")]
     fn as_test(&mut self) -> Option<&mut TestWindow> {
         None
     }
@@ -1071,7 +1071,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     /// This does not present the frame to screen - useful for visual testing where we want
     /// to capture what would be rendered without displaying it or requiring the window to be visible.
     #[cfg(all(feature = "ui", any(test, feature = "test-support")))]
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn render_to_image(&self, _scene: &Scene) -> Result<RgbaImage> {
         anyhow::bail!("render_to_image not implemented for this platform")
     }
@@ -1084,7 +1084,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
 ))]
 pub trait PlatformHeadlessRenderer {
     /// Render a scene and return the result as an RGBA image.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn render_scene_to_image(
         &mut self,
         scene: &Scene,
@@ -1096,7 +1096,7 @@ pub trait PlatformHeadlessRenderer {
     /// This is the headless analogue of presenting a frame: it performs the
     /// same CPU-side scene encoding and GPU submission as drawing to a real
     /// window, but doesn't block on GPU completion or copy pixels back.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> Result<()>;
 
     /// Returns the sprite atlas used by this renderer.
@@ -1552,7 +1552,7 @@ pub trait InputHandler: 'static {
     /// Corresponds to [selectedRange()](https://developer.apple.com/documentation/appkit/nstextinputclient/1438242-selectedrange)
     ///
     /// Return value is in terms of UTF-16 characters, from 0 to the length of the document
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn selected_text_range(
         &mut self,
         ignore_disabled_input: bool,
@@ -1564,14 +1564,14 @@ pub trait InputHandler: 'static {
     /// Corresponds to [markedRange()](https://developer.apple.com/documentation/appkit/nstextinputclient/1438250-markedrange)
     ///
     /// Return value is in terms of UTF-16 characters, from 0 to the length of the document
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn marked_text_range(&mut self, window: &mut Window, cx: &mut App) -> Option<Range<usize>>;
 
     /// Get the text for the given document range in UTF-16 characters
     /// Corresponds to [attributedSubstring(forProposedRange: actualRange:)](https://developer.apple.com/documentation/appkit/nstextinputclient/1438238-attributedsubstring)
     ///
     /// range_utf16 is in terms of UTF-16 characters
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
@@ -1584,7 +1584,7 @@ pub trait InputHandler: 'static {
     /// Corresponds to [insertText(_:replacementRange:)](https://developer.apple.com/documentation/appkit/nstextinputclient/1438258-inserttext)
     ///
     /// replacement_range is in terms of UTF-16 characters
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn replace_text_in_range(
         &mut self,
         replacement_range: Option<Range<usize>>,
@@ -1599,7 +1599,7 @@ pub trait InputHandler: 'static {
     ///
     /// range_utf16 is in terms of UTF-16 characters
     /// new_selected_range is in terms of UTF-16 characters
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn replace_and_mark_text_in_range(
         &mut self,
         range_utf16: Option<Range<usize>>,
@@ -1611,7 +1611,7 @@ pub trait InputHandler: 'static {
 
     /// Remove the IME 'composing' state from the document
     /// Corresponds to [unmarkText()](https://developer.apple.com/documentation/appkit/nstextinputclient/1438239-unmarktext)
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn unmark_text(&mut self, window: &mut Window, cx: &mut App);
 
     /// Insert a platform-initiated paste at the current selection.
@@ -1620,7 +1620,7 @@ pub trait InputHandler: 'static {
     /// application-defined action (e.g. the DOM `paste` event on web) call
     /// this with the full clipboard contents. The default implementation
     /// inserts only the plain-text portion of the item.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn paste(&mut self, item: ClipboardItem, window: &mut Window, cx: &mut App) {
         if let Some(text) = item.text() {
             self.replace_text_in_range(None, &text, window, cx);
@@ -1631,7 +1631,7 @@ pub trait InputHandler: 'static {
     /// Corresponds to [firstRect(forCharacterRange:actualRange:)](https://developer.apple.com/documentation/appkit/nstextinputclient/1438240-firstrect)
     ///
     /// This is used for positioning the IME candidate window
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn bounds_for_range(
         &mut self,
         range_utf16: Range<usize>,
@@ -1642,7 +1642,7 @@ pub trait InputHandler: 'static {
     /// Get the character offset for the given point in terms of UTF16 characters
     ///
     /// Corresponds to [characterIndexForPoint:](https://developer.apple.com/documentation/appkit/nstextinputclient/characterindex(for:))
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn character_index_for_point(
         &mut self,
         point: Point<Pixels>,
@@ -1659,7 +1659,7 @@ pub trait InputHandler: 'static {
     /// Android `InputConnection.setSelection`).
     ///
     /// range_utf16 is in terms of UTF-16 characters, from 0 to the length of the document
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn set_selected_text_range(
         &mut self,
         _range_utf16: Range<usize>,
@@ -1674,13 +1674,13 @@ pub trait InputHandler: 'static {
     /// push: mobile platforms ask for the focused element's geometry when they
     /// need it (e.g. to frame system text-interaction UI overlaid on the focused
     /// element).
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn element_bounds(&mut self, _window: &mut Window, _cx: &mut App) -> Option<Bounds<Pixels>> {
         None
     }
 
     /// Get the length of the document in UTF-16 characters, if known.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn text_length_utf16(&mut self, _window: &mut Window, _cx: &mut App) -> Option<usize> {
         None
     }
@@ -1695,7 +1695,7 @@ pub trait InputHandler: 'static {
     }
 
     /// Returns whether this handler is accepting text input to be inserted.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn accepts_text_input(&mut self, _window: &mut Window, _cx: &mut App) -> bool {
         true
     }
@@ -1710,7 +1710,7 @@ pub trait InputHandler: 'static {
     /// when it cannot (a selection spanning a region boundary), platforms
     /// degrade the mirrored IME context rather than widening the range.
     /// `None` places no bound.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn text_input_editable_range(
         &mut self,
         _window: &mut Window,
@@ -1727,7 +1727,7 @@ pub trait InputHandler: 'static {
     /// Defaults to `false`. The editor overrides this based on whether it expects
     /// character input (e.g. Vim insert mode returns `true`, normal mode returns `false`).
     /// The terminal keeps the default `false` so that raw keys reach the terminal process.
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn prefers_ime_for_printable_keys(&mut self, _window: &mut Window, _cx: &mut App) -> bool {
         false
     }
@@ -1737,7 +1737,7 @@ pub trait InputHandler: 'static {
     /// GPUI re-queries this every frame and forwards it to the platform window
     /// only when it changes, so implementations must be cheap and may vary the
     /// result with application state (e.g. with the cursor's position).
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     fn text_input_configuration(
         &mut self,
         _window: &mut Window,
@@ -2342,7 +2342,7 @@ pub enum ClipboardEntry {
     /// An image entry
     Image(Image),
     /// A file entry
-    #[cfg(any(test, feature = "test-support", feature = "ui"))]
+    #[cfg(feature = "ui")]
     ExternalPaths(crate::ExternalPaths),
 }
 
@@ -2393,7 +2393,7 @@ impl ClipboardItem {
 
         if answer.is_empty() {
             for _entry in self.entries.iter() {
-                #[cfg(any(test, feature = "test-support", feature = "ui"))]
+                #[cfg(feature = "ui")]
                 if let ClipboardEntry::ExternalPaths(_entry) = _entry {
                     for path in &_entry.0 {
                         use std::fmt::Write as _;
@@ -2615,7 +2615,7 @@ impl Image {
 
     /// Use the GPUI `use_asset` API to make this image renderable
     #[cfg(feature = "ui")]
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn use_render_image(
         self: Arc<Self>,
         window: &mut Window,
@@ -2628,7 +2628,7 @@ impl Image {
 
     /// Use the GPUI `get_asset` API to make this image renderable
     #[cfg(feature = "ui")]
-#[cfg(any(test, feature = "test-support", feature = "ui"))]
+#[cfg(feature = "ui")]
     pub fn get_render_image(
         self: Arc<Self>,
         window: &mut Window,

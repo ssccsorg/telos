@@ -11,7 +11,7 @@ use std::{
 };
 
 #[cfg(any(test, feature = "leak-detection"))]
-use std::sync::RwLock;
+use parking_lot::RwLock;
 
 use anyhow::{Context as _, Result};
 use derive_more::{Deref, DerefMut};
