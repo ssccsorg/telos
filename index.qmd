@@ -11,18 +11,22 @@ format:
 title_meta_items = {
     "html": [
         {"title": "References", "link": "https://github.com/ssccsorg/actus", "content": "Actus", "icon": "bi bi-link"},
+        {"title": "References", "link": "https://docs.ssccs.org/projects/kinetics/", "content": "kineTics", "icon": "bi bi-link"},
         {"title": "References", "link": "https://docs.ssccs.org/projects/syntagma/", "content": "synTagma", "icon": "bi bi-link"},
         {"title": "References", "link": "https://docs.ssccs.org/projects/nexus/", "content": "neXus", "icon": "bi bi-link"},
     ]
 }
 ```
 
-Telos is the general agent execution layer of the SSCCS stack. It sits
-below actus and above the physical medium: actus plans with the LLM,
-telos converts those plans into system effects. A command arrives, a
-coordinate is resolved, a process or file or network effect happens, and
-the result returns. The layer is general: it is not tied to a code editor,
-a language, or a domain. It executes.
+Telos is the general agent execution layer of the SSCCS stack and the
+base system agent instance under the actus hub. Under
+[kineTics](https://docs.ssccs.org/projects/kinetics/), actus supervises
+the agent executor type; Telos is its first instance. Planning with the
+LLM and converting plans into system effects happen inside Telos: a
+command arrives over the actus contract, a coordinate is resolved, a
+process or file or network effect happens, and the result returns. The
+layer is general: it is not tied to a code editor, a language, or a
+domain. It executes.
 
 The working thesis is that an agent does not need to traverse trees to
 act. Files are not found by descent; work is addressed by coordinate and
@@ -40,7 +44,7 @@ def dot(src: str):
 
 ```{python}
 #| label: fig-telos-hierarchy
-#| fig-cap: "The SSCCS stack: physical foundation, data hub, verification, intelligence, and execution. Telos is the execution layer that turns actus plans into system effects."
+#| fig-cap: "The SSCCS stack layers. Actus is the hub of the agent executor type; Telos is its base system agent instance that turns plans into system effects."
 dot("""
 digraph SSCCSStack {
     rankdir=TB;
@@ -49,8 +53,8 @@ digraph SSCCSStack {
     foundation [label="Physical foundation\nChton (tagma)", fillcolor="#d4f1f9"];
     hub        [label="Data hub\nNexus", fillcolor="#e1bee7"];
     verify     [label="Verification\nEV and peers", fillcolor="#fff9c4"];
-    intellect  [label="Intelligence\nActus", fillcolor="#a8e6cf"];
-    execute    [label="Execution\nTelos", fillcolor="#ffd3b6"];
+    intellect  [label="Agent hub\nActus", fillcolor="#a8e6cf"];
+    execute    [label="Base agent instance\nTelos", fillcolor="#ffd3b6"];
 
     foundation -> hub -> verify -> intellect -> execute;
     execute -> foundation [label="system effects", style=dashed];
@@ -65,8 +69,8 @@ digraph SSCCSStack {
 | Physical foundation | Chton (tagma) | coordinates over disk, RAM, and network bytes |
 | Data hub | Nexus | logs, snapshots, and state over the coordinate space |
 | Verification | EV and peers | mathematical verification of coordinate operations |
-| Intelligence | Actus | planning with the LLM, domain knowledge |
-| Execution | Telos | command intake, system call conversion, ACP/MCP execution |
+| Agent hub | Actus | hub of the agent executor type under kineTics; supervises agent instances |
+| Base agent instance | Telos | LLM planning, command intake, and system-effect conversion over ACP/MCP |
 
 ## Contract
 
@@ -78,11 +82,11 @@ flow from actus to telos, and every consumer path in actus depends on
 their semantics, including cumulative content overwrite, turn-end replay
 filtering, and the one-terminal-event-per-request rule.
 
-The bootstrap starts at the boundary. A mock agent emits the exact event
-sequences actus expects, the conformance suite gates every change, and the
-real execution core is filled in behind that stable surface. Because the
-interface is fixed first, the internals can be rebuilt freely without
-touching actus.
+The bootstrap starts at the boundary. A deterministic stub emits the
+exact event sequences actus expects, the conformance suite gates every
+change, and the real execution core is filled in behind that stable
+surface. Because the interface is fixed first, the internals can be
+rebuilt freely without touching actus.
 
 ## Design
 
@@ -99,18 +103,25 @@ touching actus.
 ## Status
 
 The contract is implemented end to end and pinned by conformance suites.
-A deterministic fake backend exercises the actus flows without an LLM,
+A deterministic stub backend exercises the actus flows without an LLM,
 and the live suite runs through the actus `run.sh` test path. The real
 agent core is attached: the `tel` binary wires the agent core and serves
 the actus contract directly. Telos is an independent project; the
 absorbed agent core sits beneath its own crate, and actus depends on
 telos only.
 
+Two integration items sit on the telos board: the headless entry point
+must consume `--user-data-dir` so actus-injected settings and context
+servers reach the agent process, and a prebuilt agent image must be
+published so downstream actus CI can pull it instead of building.
+
 Indexing into the tagma coordinate space and time teleport remain the
 next steps.
 
 ## Direction
 
+- Consume `--user-data-dir` in the headless entry point and publish the
+  prebuilt agent image, completing the actus integration contract.
 - Indexing integrated into tagma coordinates, so location resolution is
   arithmetic over coordinates instead of filesystem descent.
 - Time teleport: nexus replay restores a previous execution state at fine
