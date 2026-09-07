@@ -71,11 +71,14 @@ jobs:
           sbom: false
 
       - name: Make the package public
-        if: ${{ secrets.TELOS_GHCR_PAT != '' }}
         env:
           GH_TOKEN: ${{ secrets.TELOS_GHCR_PAT }}
           GH_OWNER: ${{ github.repository_owner }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::TELOS_GHCR_PAT is not configured; the package visibility is not changed automatically (set it once in the GHCR package settings)"
+            exit 0
+          fi
           if ! gh api -X POST "/orgs/${GH_OWNER}/packages/container/telos/visibility" -f visibility=public 2>/dev/null; then
             gh api -X POST "/user/packages/container/telos/visibility" -f visibility=public 2>/dev/null \
               || echo "::warning::could not set the package visibility to public; set it once in the GHCR package settings (PAT with write:packages + org admin)"
