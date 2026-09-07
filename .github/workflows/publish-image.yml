@@ -2,7 +2,8 @@ name: Publish agent image
 
 # Builds the headless agent binary (`tel`) and publishes the container image
 # to GHCR so downstream consumers (actus CI) can pull instead of building the
-# telos workspace on every run. The binary stays at the stable path
+# telos workspace on every run. The package is public, so any project can pull
+# without authentication. The binary stays at the stable path
 # /workspace/target/telos-release/tel inside the image; consumers point
 # TELOS_BIN there.
 #
