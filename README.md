@@ -39,16 +39,6 @@ LLM configuration and `context_servers` MCP entries load into the
 process. MCP tool exposure is profile-gated and covered by the agent MCP
 tests.
 
-## Position in the stack
-
-| Layer | Project | Role |
-|:---|:---|:---|
-| Physical foundation | Chton (tagma) | coordinates over disk, RAM, network |
-| Data hub | Nexus | logs, snapshots, state over the coordinate space |
-| Verification | EV and peers | mathematical verification of coordinate operations |
-| Intelligence | Actus | planning with the LLM, domain knowledge |
-| Execution | Telos | command intake, system call conversion, ACP/MCP execution |
-
 ## Distribution
 
 A prebuilt agent image is published to `ghcr.io/ssccsorg/telos` on main
