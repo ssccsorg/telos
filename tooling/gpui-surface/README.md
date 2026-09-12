@@ -17,89 +17,81 @@ Both outputs are committed; regenerate them after every dependency change.
 
 ## Measured result (2026-09)
 
-101 sourced crates, 107 distinct gpui items. Production usage concentrates
+101 sourced crates, 85 distinct gpui items. Production usage concentrates
 on the runtime layer and value types:
 
 - runtime primitives: App, AppContext, AsyncApp, Context, Entity,
   WeakEntity, Task, BackgroundExecutor, Global, Subscription,
   EventEmitter, SubscriberSet, SharedString, px/point helpers
 - value types (Stream 2 data-model leakage): Hsla, Rgba, HighlightStyle,
-  FontStyle, FontWeight, Pixels, Point, Rems, rgb/red/green/... helpers
-- exceptions to verify per wave: `StyledText` (used by
-  `language/src/buffer.rs`), `Action`/keymap leftovers inside test-only
-  code, platform crates (`gpui_linux`, `gpui_macos`) referencing
-  window/scene/text types
+  ObjectFit, Font/FontId/FontFeatures/FontFallbacks/FontStyle/FontWeight,
+  Pixels, Point, Rems, rgb/red/green/... helpers
 
-No production use was found (direct-path scan) for: window, scene,
-elements/div, text_system rendering, svg_renderer, img, interactive,
-key_dispatch, gestures, input, tab_stop, path_builder, spring, arena,
-bounds_tree, debug_overlay, inspector, queue, shared_uri, asset_cache,
-action/keymap/register_action.
+The render stack, the element/view layer, the interaction cluster, and the
+gpui platform window backends are gone from the crate: `window.rs`,
+`scene.rs`, `element.rs`, `elements/`, `view.rs`, `styled.rs`, `taffy.rs`,
+`interactive.rs`, `key_dispatch.rs`, `tab_stop.rs`, `gestures.rs`,
+`svg_renderer.rs`, `spring.rs`, `inspector.rs`, `image_cache.rs`, and the
+image half of `assets.rs` were deleted, and the `ui` feature with its
+`resvg`/`usvg`/`image`/`fontdb`/`taffy` dependencies was dropped. The
+remaining contacts in `contacts.txt` are value-type reads only.
 
 ## Wave 3 contact surface (measured 2026-09)
 
-`contacts.txt` records the consumer side of the Wave 3 gate set: for each
-reachable crate file, the gpui UI-cluster items it references and the gpui
-module that defines them. It answers, per UI-cluster module, which
-consumer sites keep it compiled. Contact removal happens at these
-consumer sites (the gpui contact surface), so the gpui-side change for a
-module is a whole-module gate instead of item-level surgery.
+`contacts.txt` records the consumer side of the Wave 3 contact surface: for
+each reachable crate file, the gpui items it references and the gpui module
+that defines them. After the ui-cluster deletion the surface is 19 files,
+all reading value types:
 
-Measured contact by module:
+- `HighlightStyle` (`style.rs`): language (buffer, outline), syntax_theme,
+  theme (fallback_themes), theme_settings, project signature_help
+- `Font`, `FontFeatures`, `FontFallbacks`, `FontStyle`, `FontWeight`
+  (`text_system*`): settings, settings_content, syntax_theme, theme,
+  theme_settings, terminal_settings, project signature_help
+- `ObjectFit`, `size`, `AssetSource` (`style.rs`, `assets.rs`): language_model
+  request, prompt_store, theme (registry, theme)
+- `KeyBinding*` (`keymap/`): settings keymap_file
 
-- window.rs: feature_flags, language_model, project (image_store,
-  project), session (WindowId), terminal, theme_settings, zed_actions
-- view.rs: language_model, zed_actions
-- styled.rs: theme (Styled)
-- element.rs: settings/editable_setting_control (RenderOnce)
-- elements/list.rs: acp_thread, agent (ListOffset)
-- elements/text.rs: language/buffer (StyledText)
-- elements/img.rs: project/image_store (Img, ImageSource,
-  ImageCacheError)
-- assets.rs / asset_cache.rs: project/image_store, prompt_store, theme
-  (AssetSource, Asset, AssetLogger, RenderImage, size)
-- shared_uri.rs: client (SharedUri)
-- interactive.rs: terminal (input events, kept for the emulator input
-  path per the 2026-09-03 usage note)
-- keymap/ and action leftovers: settings/keymap_file, zed_actions
-- text_system and style.rs rows are Stream 2 value types (Font*,
-  HighlightStyle, TextStyle, ObjectFit) that stay as data; only the
-  layout/render half of these modules is in the gate set.
-- terminal rows: `terminal/src/terminal.rs` cleared once its
-  UI-interaction layer moved behind `cfg(any(test, feature = "ui"))`.
-  `terminal/src/mappings/mouse.rs` remains listed because the scanner
-  counts source references; the module is compiled only under the same
-  gate, so it is absent from the headless graph.
+`terminal/src/terminal.rs` no longer appears: its UI-interaction layer
+(mouse, hover, hyperlink, selection, vi, window sync) was deleted outright,
+and `terminal/src/mappings/mouse.rs` and the crate's `ui` feature with it.
+`terminal/src/terminal_settings.rs` stays as a value-type reader for the
+font settings it serializes.
 
 The scanner strips cfg(test) and cfg(any(test, ...)) blocks, so rows are
-source-level truth for compiled production code; rows inside modules that
-are themselves ui-gated (for example terminal mappings/mouse.rs) are not
-compiled in the headless graph.
+source-level truth for compiled production code.
 
 ## Cut waves
 
 Wave membership is confirmed at execution time by compile errors plus the
 item manifest; each wave lands as one PR verified by the LLM-free gate.
 
-1. Wave 1: delete interaction cluster with zero production sites (input,
-   gestures, key_dispatch, tab_stop, path_builder, spring, arena,
-   bounds_tree, debug_overlay, inspector, queue, shared_uri,
+1. Wave 1 (done): deleted the interaction cluster with zero production
+   sites (input, gestures, key_dispatch, tab_stop, path_builder, spring,
+   arena, bounds_tree, debug_overlay, inspector, queue, shared_uri,
    asset_cache) after an internal-reference grep inside gpui.
-2. Wave 2: action/keymap/actions macro surface, after relocating or
-   cfg(test)-gating the test-only users in settings and zed_actions.
-3. Wave 3: rendering stack (svg_renderer, img, scene, elements, styled,
-   text_system raster path, taffy) plus their Cargo deps (resvg/usvg,
-   image codecs, fontdb), once platform crates no longer reference them.
-   Execution order is contact-driven: for each module in the gate set,
-   remove the consumer contacts in `contacts.txt` first (consumer-side
-   edits), then gate the whole module behind the `ui` feature. Progress
-   is tracked per commit on the wave branch.
-4. Wave 4: value-type extraction (Hsla/Rgba/HighlightStyle/font/geometry)
-   to a telos-owned crate, gpui re-exports during transition.
-5. Wave 5: rename the remaining crate (runtime primitives only) from
-   `gpui` to a telos-owned name via a dependency alias.
+2. Wave 2 (done): removed the action/keymap/actions macro surface, after
+   relocating or cfg(test)-gating the test-only users in settings and
+   zed_actions.
+3. Wave 3 (done): removed the rendering stack (svg_renderer, img, scene,
+   elements, styled, element, view, taffy, window, text_system raster
+   path) and the gpui `ui` feature with its Cargo deps (resvg/usvg,
+   image codecs, fontdb, taffy, font-kit, fontconfig). Execution was
+   contact-driven: consumer contacts came out first, then the modules
+   were gated behind a transitional `ui` feature and finally deleted
+   outright once the headless build was green. The terminal
+   ui-interaction layer, its mouse mapping, and its `ui` feature were
+   deleted the same way.
+4. Wave 4 (open): value-type extraction (Hsla/Rgba/HighlightStyle/font/
+   geometry) to a telos-owned crate, gpui re-exports during transition.
+5. Wave 5 (open): rename the remaining crate (runtime primitives only)
+   from `gpui` to a telos-owned name via a dependency alias.
 
 ## UI cluster cut design (Wave 3)
+
+Status: implemented. The plan below was executed with a transitional `ui`
+feature; once the headless build was green the feature and the gated
+modules were deleted outright, so gpui compiles a single headless platform.
 
 Boundary facts (measured 2026-09):
 

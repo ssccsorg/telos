@@ -57,10 +57,20 @@ recorded in at least one of these places:
 - the Crate Map or the divergence notes in this file,
 - a report in `docs/sync/`.
 
-Current divergence: `crates/gpui` is being cut down to the runtime subset
-the headless graph uses. UI subsystems are removed incrementally; the
-measured surface, cut waves, and progress live in
-`tooling/gpui-surface/README.md` and `tooling/gpui-surface/manifest.txt`.
+Current divergences:
+
+- `crates/gpui` is cut down to the runtime subset the headless graph uses.
+  The render stack, element/view layer, interaction cluster, and platform
+  window backends are deleted, and the `ui` feature with its
+  resvg/usvg/image/fontdb/taffy/font-kit dependencies is gone. The measured
+  surface, cut waves, and progress live in `tooling/gpui-surface/`.
+- `crates/terminal` drops the IDE UI-interaction layer (mouse, hover,
+  hyperlink, selection, vi, window sync) together with its transitional
+  `ui` feature and `mappings/mouse.rs`. The agent-facing API (spawn, write,
+  wait_for_exit, get_content, total_lines, kill_active_task, is_pty,
+  pid_getter, task) is unchanged.
+- The build image no longer installs `libfontconfig-dev`; the pruned graph
+  links nothing that needs it.
 
 ## Boundary and Invariants
 
@@ -133,7 +143,7 @@ about whether a crate belongs, ask whether the binary can reach it.
 | `context_server`, `fs`, `git`, `text`, `streaming_diff` | kept | MCP client, file and diff semantics |
 | `html_to_markdown` | kept | HTML to markdown conversion used by message content |
 | `markdown`, `mermaid_render` | excluded | render-only stack, stripped with the UI surface |
-| `gpui` + platform crates | diverging | runtime subset cut in progress; keep only what the headless graph uses (App/Entity/Task/values), see `tooling/gpui-surface/`; port upstream gpui changes selectively |
+| `gpui` + platform crates | diverging | runtime subset only; UI/render surface deleted (see `tooling/gpui-surface/`); keep App/Entity/Task/values; port upstream gpui changes selectively |
 | `theme`, `theme_settings`, `syntax_theme` | kept | consumed by the retained graph; authoritative closure is `cargo tree -p telos` |
 | `icons` | kept, 28 variants | `IconName` only |
 | `ui` | excluded | stripped once the graph stopped referencing widget symbols; never sync |
