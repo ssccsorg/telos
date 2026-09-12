@@ -9,8 +9,8 @@ mod hyperlinks;
 use alacritty_terminal::{
     event::{Event as AlacTermEvent, EventListener, Notify, WindowSize},
     event_loop::{EventLoop, Msg, Notifier},
-    grid::{Dimensions, Grid, GridIterator, Row, Scroll as AlacScroll},
-    index::{Boundary, Column, Direction as AlacDirection, Line, Point as AlacPoint},
+    grid::{Dimensions, Grid, GridIterator, Row},
+    index::{Column, Direction as AlacDirection, Line, Point as AlacPoint},
     selection::{
         Selection as AlacSelection, SelectionRange as AlacSelectionRange,
         SelectionType as AlacSelectionType,
@@ -22,7 +22,6 @@ use alacritty_terminal::{
         search::{Match, RegexIter, RegexSearch},
     },
     tty,
-    vi_mode::{ViModeCursor, ViMotion as AlacViMotion},
     vte::ansi::{
         ClearMode, CursorShape as AlacCursorShape, CursorStyle as AlacCursorStyle,
         NamedPrivateMode, PrivateMode,
@@ -30,7 +29,6 @@ use alacritty_terminal::{
 };
 use anyhow::{Context as _, Result};
 use futures::channel::mpsc::UnboundedSender;
-use util::paths::PathStyle;
 use vte::ansi::Handler;
 #[cfg(target_os = "windows")]
 use windows::Win32::{Foundation::HANDLE, System::Threading::GetProcessId};
@@ -89,16 +87,6 @@ pub(super) struct PtySender {
 impl PtySender {
     pub(super) fn notify(&self, input: impl Into<Cow<'static, [u8]>>) {
         self.notifier.notify(input);
-    }
-
-    pub(super) fn resize(&self, bounds: TerminalBounds) {
-        if let Err(error) = self
-            .notifier
-            .0
-            .send(Msg::Resize(window_size_from_terminal_bounds(bounds)))
-        {
-            log::error!("failed to resize alacritty pty: {error}");
-        }
     }
 
     pub(super) fn shutdown(&self) {
@@ -216,53 +204,12 @@ pub(super) fn spawn_event_loop(
     })
 }
 
-pub(super) fn resize(term: &mut AlacrittyTerm, bounds: TerminalBounds) {
-    term.resize(bounds);
-}
-
-pub(super) fn display_offset(term: &AlacrittyTerm) -> usize {
-    term.grid().display_offset()
-}
-
-pub(super) fn scroll_display(term: &mut AlacrittyTerm, scroll: Scroll) {
-    term.scroll_display(scroll.to_alacritty());
-}
-
 pub(super) fn set_selection(term: &mut AlacrittyTerm, selection: Option<&Selection>) {
     term.selection = selection.map(Selection::to_alacritty);
 }
 
-pub(super) fn update_selection(
-    term: &mut AlacrittyTerm,
-    point: Point,
-    side: SelectionSide,
-) -> bool {
-    let Some(mut selection) = term.selection.take() else {
-        return false;
-    };
-    selection.update(point.to_alacritty(), side.to_alacritty());
-    term.selection = Some(selection);
-    true
-}
-
 pub(super) fn selection_text(term: &AlacrittyTerm) -> Option<String> {
     term.selection_to_string()
-}
-
-pub(super) fn scroll_to_point(term: &mut AlacrittyTerm, point: Point) {
-    term.scroll_to_point(point.to_alacritty());
-}
-
-pub(super) fn vi_goto_point(term: &mut AlacrittyTerm, point: Point) {
-    term.vi_goto_point(point.to_alacritty());
-}
-
-pub(super) fn toggle_vi_mode(term: &mut AlacrittyTerm) {
-    term.toggle_vi_mode();
-}
-
-pub(super) fn vi_motion(term: &mut AlacrittyTerm, motion: ViMotion) {
-    term.vi_motion(motion.to_alacritty());
 }
 
 fn alacritty_cursor_style(cursor_shape: SettingsCursorShape) -> AlacCursorStyle {
@@ -329,40 +276,9 @@ impl EventListener for ZedListener {
     }
 }
 
-impl Scroll {
-    fn to_alacritty(self) -> AlacScroll {
-        match self {
-            Self::Delta(delta) => AlacScroll::Delta(delta),
-            Self::PageUp => AlacScroll::PageUp,
-            Self::PageDown => AlacScroll::PageDown,
-            Self::Top => AlacScroll::Top,
-            Self::Bottom => AlacScroll::Bottom,
-        }
-    }
-}
+impl Scroll {}
 
-impl ViMotion {
-    fn to_alacritty(self) -> AlacViMotion {
-        match self {
-            Self::Up => AlacViMotion::Up,
-            Self::Down => AlacViMotion::Down,
-            Self::Left => AlacViMotion::Left,
-            Self::Right => AlacViMotion::Right,
-            Self::First => AlacViMotion::First,
-            Self::Last => AlacViMotion::Last,
-            Self::FirstOccupied => AlacViMotion::FirstOccupied,
-            Self::High => AlacViMotion::High,
-            Self::Middle => AlacViMotion::Middle,
-            Self::Low => AlacViMotion::Low,
-            Self::WordLeft => AlacViMotion::WordLeft,
-            Self::WordRight => AlacViMotion::WordRight,
-            Self::WordRightEnd => AlacViMotion::WordRightEnd,
-            Self::Bracket => AlacViMotion::Bracket,
-            Self::ParagraphUp => AlacViMotion::ParagraphUp,
-            Self::ParagraphDown => AlacViMotion::ParagraphDown,
-        }
-    }
-}
+impl ViMotion {}
 
 impl Search {
     pub fn new(search: &str) -> Option<Self> {
@@ -969,48 +885,6 @@ pub(super) fn last_non_empty_lines(term: &Term<ZedListener>, line_count: usize) 
 
     lines.reverse();
     lines
-}
-
-pub(super) fn update_vi_cursor_for_scroll(term: &mut Term<ZedListener>, scroll: Scroll) {
-    match scroll {
-        Scroll::Delta(delta) => {
-            term.vi_mode_cursor = term.vi_mode_cursor.scroll(term, delta);
-        }
-        Scroll::PageUp => {
-            let lines = term.screen_lines() as i32;
-            term.vi_mode_cursor = term.vi_mode_cursor.scroll(term, lines);
-        }
-        Scroll::PageDown => {
-            let lines = -(term.screen_lines() as i32);
-            term.vi_mode_cursor = term.vi_mode_cursor.scroll(term, lines);
-        }
-        Scroll::Top => {
-            let point = AlacPoint::new(term.topmost_line(), Column(0));
-            term.vi_mode_cursor = ViModeCursor::new(point);
-        }
-        Scroll::Bottom => {
-            let point = AlacPoint::new(term.bottommost_line(), Column(0));
-            term.vi_mode_cursor = ViModeCursor::new(point);
-        }
-    }
-}
-
-pub(super) fn update_selection_to_vi_cursor(term: &mut Term<ZedListener>) -> Option<Point> {
-    let mut selection = term.selection.take()?;
-    let point = term.vi_mode_cursor.point;
-    selection.update(point, AlacDirection::Right);
-    term.selection = Some(selection);
-    Some(terminal_point_from_alacritty(point))
-}
-
-pub(super) fn find_from_terminal_point(
-    term: &AlacrittyTerm,
-    point: Point,
-    regex_searches: &mut RegexSearches,
-    path_style: PathStyle,
-) -> Option<HyperlinkMatch> {
-    let point = point.to_alacritty().grid_clamp(term, Boundary::Grid);
-    hyperlinks::find_from_grid_point(term, point, regex_searches, path_style)
 }
 
 fn logical_line_for_row(grid: &Grid<AlacCell>, current: i32, topmost: i32) -> (i32, String) {
