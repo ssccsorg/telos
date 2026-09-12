@@ -36,6 +36,7 @@ jobs:
       - name: Deterministic conformance (stub backend, no LLM)
         run: |
           docker run --rm \
+            -e CI \
             -e TELOS_BIN=/workspace/target/telos-release/tel \
             -v "$GITHUB_WORKSPACE/actus:/home/actus" \
             -w /home/actus \
