@@ -28,19 +28,38 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ENV CARGO_INCREMENTAL=0
 WORKDIR /workspace
 
+# cargo-chef turns the dependency compile into a layer keyed on the
+# manifests rather than the sources, so a source-only change reuses it.
+# Installed above the source copy so the tool itself is cached too.
+RUN cargo install cargo-chef --locked
+
+# The recipe is the dependency graph without the sources. The planner sees
+# the full context; the build stages copy only its recipe so their
+# dependency layer survives source changes.
+FROM env AS planner
 COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
 # The LLM-free gate: the full workspace must compile in telos (every synced
 # crate builds here), and unit tests cover only the telos-owned crate.
 # Synced crates keep their behavior suites upstream; the absorb procedure is
 # VENDORING.md.
-# One RUN keeps the multi-GB debug target out of the image (and out of the
-# gha layer cache, whose 10GB cap the full debug tree would exceed).
+# cook compiles the workspace dependencies into target/debug so the workspace
+# check reuses them; the final RUN then compiles only the changed crates and
+# drops target so the debug tree stays out of the image.
 FROM env AS gate
+COPY --from=planner /workspace/recipe.json recipe.json
+RUN cargo chef cook --recipe-path recipe.json
+COPY . .
 RUN cargo check --workspace \
     && cargo test -p telos \
     && rm -rf /workspace/target
 
 # The agent binary used by the deterministic conformance tier (e2e-stub).
+# cook pre-compiles the release dependencies of the `telos` package; the
+# final RUN then only builds telos and its changed path dependencies.
 FROM env AS tel
+COPY --from=planner /workspace/recipe.json recipe.json
+RUN cargo chef cook --profile telos-release --package telos --recipe-path recipe.json
+COPY . .
 RUN cargo build --profile telos-release -p telos

@@ -38,8 +38,8 @@ jobs:
         run: |
           docker buildx build --load \
             --target gate \
-            --cache-from type=gha,scope=shared-telos \
-            --cache-to type=gha,mode=min,scope=shared-telos \
+            --cache-from type=gha,scope=telos-gate \
+            --cache-to type=gha,mode=min,ignore-error=true,scope=telos-gate \
             -t telos:gate \
             .
 
