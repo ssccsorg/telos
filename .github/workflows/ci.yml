@@ -16,6 +16,8 @@ concurrency:
 
 permissions:
   contents: read
+  # The build cache is stored as a tag in the image repository.
+  packages: write
 
 jobs:
   core:
@@ -34,12 +36,23 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
+      - name: Log in to GHCR for the build cache
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build the gate image (workspace check + telos tests)
         run: |
+          # The cache is a registry artifact rather than type=gha. The gha
+          # backend caps the repository at 10GB and keys entries per git ref, so
+          # the gate and tel entries evicted one another and a branch could not
+          # reuse another branch's dependency layer.
           docker buildx build --load \
             --target gate \
-            --cache-from type=gha,scope=telos-gate \
-            --cache-to type=gha,mode=min,ignore-error=true,scope=telos-gate \
+            --cache-from type=registry,ref=ghcr.io/ssccsorg/telos:buildcache-gate \
+            --cache-to type=registry,ref=ghcr.io/ssccsorg/telos:buildcache-gate,mode=max \
             -t telos:gate \
             .
 
