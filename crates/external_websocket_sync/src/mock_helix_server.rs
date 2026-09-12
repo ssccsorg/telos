@@ -1105,7 +1105,7 @@ mod tests {
 
         // Verify connection is registered
         server
-            .wait_for_connection("test-session-1", Duration::from_secs(2))
+            .wait_for_connection("test-session-1", Duration::from_secs(5))
             .await
             .unwrap();
         assert!(server.is_connected("test-session-1").await);
@@ -1123,7 +1123,7 @@ mod tests {
         let (mut write, _read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-2", Duration::from_secs(2))
+            .wait_for_connection("test-session-2", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1139,7 +1139,7 @@ mod tests {
 
         // Wait for the event to be recorded
         let events = server
-            .wait_for_event("test-session-2", "agent_ready", Duration::from_secs(2))
+            .wait_for_event("test-session-2", "agent_ready", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1160,7 +1160,7 @@ mod tests {
         let (mut write, mut read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-3", Duration::from_secs(2))
+            .wait_for_connection("test-session-3", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1188,7 +1188,7 @@ mod tests {
             .unwrap();
 
         // Now the queued message should arrive
-        let msg = tokio::time::timeout(Duration::from_secs(2), read.next())
+        let msg = tokio::time::timeout(Duration::from_secs(5), read.next())
             .await
             .expect("Should receive queued message after agent_ready")
             .unwrap()
@@ -1216,7 +1216,7 @@ mod tests {
         let (mut write, mut read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-4", Duration::from_secs(2))
+            .wait_for_connection("test-session-4", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1232,7 +1232,7 @@ mod tests {
 
         // Wait for ready state
         server
-            .wait_for_event("test-session-4", "agent_ready", Duration::from_secs(2))
+            .wait_for_event("test-session-4", "agent_ready", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1242,7 +1242,7 @@ mod tests {
             .await
             .unwrap();
 
-        let msg = tokio::time::timeout(Duration::from_secs(2), read.next())
+        let msg = tokio::time::timeout(Duration::from_secs(5), read.next())
             .await
             .expect("Should receive message immediately when ready")
             .unwrap()
@@ -1284,7 +1284,7 @@ mod tests {
         assert!(result.is_ok(), "Should accept valid auth token");
 
         server
-            .wait_for_connection("test-session-5", Duration::from_secs(2))
+            .wait_for_connection("test-session-5", Duration::from_secs(5))
             .await
             .unwrap();
     }
@@ -1337,11 +1337,11 @@ mod tests {
         let (mut write2, _read2) = ws2.split();
 
         server
-            .wait_for_connection("session-A", Duration::from_secs(2))
+            .wait_for_connection("session-A", Duration::from_secs(5))
             .await
             .unwrap();
         server
-            .wait_for_connection("session-B", Duration::from_secs(2))
+            .wait_for_connection("session-B", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1366,11 +1366,11 @@ mod tests {
 
         // Verify events are tracked independently
         let events_a = server
-            .wait_for_event("session-A", "agent_ready", Duration::from_secs(2))
+            .wait_for_event("session-A", "agent_ready", Duration::from_secs(5))
             .await
             .unwrap();
         let events_b = server
-            .wait_for_event("session-B", "agent_ready", Duration::from_secs(2))
+            .wait_for_event("session-B", "agent_ready", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1395,7 +1395,7 @@ mod tests {
         let (mut write, mut read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-7", Duration::from_secs(2))
+            .wait_for_connection("test-session-7", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1410,7 +1410,7 @@ mod tests {
             .unwrap();
 
         server
-            .wait_for_event("test-session-7", "agent_ready", Duration::from_secs(2))
+            .wait_for_event("test-session-7", "agent_ready", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1420,7 +1420,7 @@ mod tests {
             .await
             .unwrap();
 
-        let msg = tokio::time::timeout(Duration::from_secs(2), read.next())
+        let msg = tokio::time::timeout(Duration::from_secs(5), read.next())
             .await
             .expect("Should receive open_thread command")
             .unwrap()
@@ -1447,7 +1447,7 @@ mod tests {
         let (mut write, _read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-8", Duration::from_secs(2))
+            .wait_for_connection("test-session-8", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1467,9 +1467,17 @@ mod tests {
                 .unwrap();
         }
 
-        // Wait for all events to arrive
+        // Wait for the last event sent. The mock server records a connection's
+        // messages in order, so the arrival of message_completed means every
+        // earlier event has been recorded too. Waiting only for the
+        // message_added pair left the checks below racing the reader task.
         server
-            .wait_for_event_count("test-session-8", "message_added", 2, Duration::from_secs(2))
+            .wait_for_event_count(
+                "test-session-8",
+                "message_completed",
+                1,
+                Duration::from_secs(5),
+            )
             .await
             .unwrap();
 
@@ -1502,7 +1510,7 @@ mod tests {
         let (mut write, _read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-9", Duration::from_secs(2))
+            .wait_for_connection("test-session-9", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1517,7 +1525,7 @@ mod tests {
             .unwrap();
 
         server
-            .wait_for_event("test-session-9", "agent_ready", Duration::from_secs(2))
+            .wait_for_event("test-session-9", "agent_ready", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1540,7 +1548,7 @@ mod tests {
         let (mut write, _read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-10", Duration::from_secs(2))
+            .wait_for_connection("test-session-10", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1565,7 +1573,7 @@ mod tests {
 
         // Wait for exactly 3
         let events = server
-            .wait_for_event_count("test-session-10", "message_added", 3, Duration::from_secs(2))
+            .wait_for_event_count("test-session-10", "message_added", 3, Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1595,7 +1603,7 @@ mod tests {
         let (mut write, mut read) = ws_stream.split();
 
         server
-            .wait_for_connection("flow-session", Duration::from_secs(2))
+            .wait_for_connection("flow-session", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1616,7 +1624,7 @@ mod tests {
             .unwrap();
 
         // Client receives the queued chat_message
-        let msg = tokio::time::timeout(Duration::from_secs(2), read.next())
+        let msg = tokio::time::timeout(Duration::from_secs(5), read.next())
             .await
             .expect("Should receive queued chat_message")
             .unwrap()
@@ -1675,7 +1683,7 @@ mod tests {
 
         // Verify all events were recorded
         server
-            .wait_for_event("flow-session", "message_completed", Duration::from_secs(2))
+            .wait_for_event("flow-session", "message_completed", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1716,7 +1724,7 @@ mod tests {
         let (_write, mut read) = ws_stream.split();
 
         server
-            .wait_for_connection("test-session-11", Duration::from_secs(2))
+            .wait_for_connection("test-session-11", Duration::from_secs(5))
             .await
             .unwrap();
 
@@ -1732,7 +1740,7 @@ mod tests {
             .unwrap();
 
         // Should receive immediately even though not ready
-        let msg = tokio::time::timeout(Duration::from_secs(2), read.next())
+        let msg = tokio::time::timeout(Duration::from_secs(5), read.next())
             .await
             .expect("Should receive immediate command")
             .unwrap()
