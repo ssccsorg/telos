@@ -427,7 +427,6 @@ pub type HelixIntegration = ExternalWebSocketSync;
 /// Main external WebSocket thread sync service
 pub struct ExternalWebSocketSync {
     session: Arc<AppSession>,
-    websocket_sync: Option<WebSocketSync>,
     sync_clients: Arc<RwLock<Vec<String>>>,
 }
 
@@ -456,34 +455,8 @@ impl ExternalWebSocketSync {
     pub fn new(session: Arc<AppSession>) -> Self {
         Self {
             session,
-            websocket_sync: None,
             sync_clients: Arc::new(RwLock::new(Vec::new())),
         }
-    }
-
-    /// Load configuration from settings
-    fn load_config(&self, cx: &App) -> Option<ExternalSyncConfig> {
-        let settings = ExternalSyncSettings::get_global(cx);
-        
-        Some(ExternalSyncConfig {
-            enabled: settings.enabled,
-            websocket_sync: WebSocketSyncConfig {
-                enabled: settings.websocket_sync.enabled,
-                url: settings.websocket_sync.external_url.clone(),
-                auth_token: settings.websocket_sync.auth_token.clone().unwrap_or_default(),
-                use_tls: settings.websocket_sync.use_tls,
-                skip_tls_verify: settings.websocket_sync.skip_tls_verify,
-            },
-            mcp: McpConfig {
-                enabled: settings.mcp.enabled,
-                server_configs: settings.mcp.servers.iter().map(|s| crate::types::McpServerConfig {
-                    name: s.name.clone(),
-                    command: s.command.clone(),
-                    args: s.args.clone(),
-                    env: s.env.clone(),
-                }).collect(),
-            },
-        })
     }
 
     /// Get session information

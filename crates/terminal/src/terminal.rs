@@ -16,18 +16,12 @@ use futures::{
 
 use alacritty_terminal::grid::Dimensions as _;
 use itertools::Itertools as _;
-#[cfg(feature = "ui")]
-use mappings::mouse::{
-    alt_scroll, grid_point, grid_point_and_side, mouse_button_report, mouse_moved_report,
-    scroll_report,
-};
 
 use async_channel::{Receiver, Sender};
 use collections::{HashMap, VecDeque};
 use futures::StreamExt;
 use pty_info::{ProcessIdGetter, PtyProcessInfo};
 use serde::{Deserialize, Serialize};
-use settings::Settings;
 use task::{HideStrategy, Shell, ShellKind, SpawnInTerminal};
 use terminal_settings::{AlternateScroll, CursorShape as SettingsCursorShape};
 use theme::{ActiveTheme, Theme};
@@ -37,7 +31,7 @@ use util::{ResultExt as _, paths::PathStyle, truncate_and_trailoff};
 use std::os::unix::process::ExitStatusExt;
 use std::{
     borrow::Cow,
-    cmp::{self, min},
+    cmp,
     fmt::{self, Display, Formatter},
     ops::{BitOr, BitOrAssign, Deref, Range as StdRange},
     path::{Path, PathBuf},
@@ -46,7 +40,7 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 use thiserror::Error;
 use vte::ansi::{Attr, Handler, Processor, StdSyncHandler};
@@ -54,19 +48,17 @@ pub use vte::ansi::{Color, NamedColor, Rgb};
 
 use gpui::{
     App, AppContext as _, BackgroundExecutor, Bounds, ClipboardItem, Context, EventEmitter, Hsla,
-    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, actions, black, px,
+    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, black, px,
 };
-#[cfg(feature = "ui")]
-use gpui::{MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollWheelEvent, TouchPhase, Window};
 
 #[cfg(not(windows))]
 use crate::alacritty::current_child_signal_mask;
 use crate::alacritty::{
-    AlacrittyCell, AlacrittyGridIterator, AlacrittyHyperlink, AlacrittySearch,
-    AlacrittyTermConfig, AlacrittyTermLock, HyperlinkMatch, PtySender, RegexSearches,
-    append_text_to_term, apply_config, clear_saved_screen, content_text,
-    display_only_term_config, full_content_range, last_non_empty_lines,
-    make_content, new_term, open_pty, pty_options, pty_term_config, screen_lines, search_matches, set_default_cursor_style, shrink_to_used, spawn_event_loop, total_lines, used_lines,
+    AlacrittyCell, AlacrittyGridIterator, AlacrittyHyperlink, AlacrittySearch, AlacrittyTermConfig,
+    AlacrittyTermLock, PtySender, append_text_to_term, apply_config, clear_saved_screen,
+    content_text, display_only_term_config, last_non_empty_lines, make_content, new_term, open_pty,
+    pty_options, pty_term_config, screen_lines, search_matches, set_default_cursor_style,
+    shrink_to_used, spawn_event_loop, total_lines, used_lines,
 };
 use crate::mappings::colors::to_vte_rgb;
 use crate::mappings::keys::to_esc_str;
@@ -88,88 +80,9 @@ impl HeadlessTerminal {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum Scroll {
-    Delta(i32),
-    PageUp,
-    PageDown,
-    Top,
-    Bottom,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum ViMotion {
-    Up,
-    Down,
-    Left,
-    Right,
-    First,
-    Last,
-    FirstOccupied,
-    High,
-    Middle,
-    Low,
-    WordLeft,
-    WordRight,
-    WordRightEnd,
-    Bracket,
-    ParagraphUp,
-    ParagraphDown,
-}
-
 #[derive(Clone, Debug)]
 pub struct Search {
     search: AlacrittySearch,
-}
-
-#[derive(Clone, Debug)]
-struct Selection {
-    ty: SelectionType,
-    start: SelectionAnchor,
-    end: SelectionAnchor,
-    head: Point,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct SelectionAnchor {
-    point: Point,
-    side: SelectionSide,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SelectionSide {
-    Left,
-    Right,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SelectionType {
-    Simple,
-    Semantic,
-    Lines,
-}
-
-impl Selection {
-    fn new(selection_type: SelectionType, point: Point, side: SelectionSide) -> Self {
-        let anchor = SelectionAnchor { point, side };
-        Self {
-            ty: selection_type,
-            start: anchor,
-            end: anchor,
-            head: point,
-        }
-    }
-
-    fn simple_range(range: Range) -> Self {
-        let mut selection = Self::new(SelectionType::Simple, range.start(), SelectionSide::Left);
-        selection.update(range.end(), SelectionSide::Right);
-        selection
-    }
-
-    fn update(&mut self, point: Point, side: SelectionSide) {
-        self.end = SelectionAnchor { point, side };
-        self.head = point;
-    }
 }
 
 pub fn is_default_background_color(color: Color) -> bool {
@@ -542,12 +455,6 @@ impl Default for Content {
     }
 }
 
-#[derive(PartialEq, Eq)]
-enum SelectionPhase {
-    Selecting,
-    Ended,
-}
-
 #[cfg(test)]
 mod domain_tests {
     use super::*;
@@ -603,44 +510,6 @@ mod domain_tests {
     }
 }
 
-actions!(
-    terminal,
-    [
-        /// Clears the terminal screen.
-        Clear,
-        /// Copies selected text to the clipboard.
-        Copy,
-        /// Pastes from the clipboard.
-        Paste,
-        /// Pastes the text from the clipboard.
-        PasteText,
-        /// Shows the character palette for special characters.
-        ShowCharacterPalette,
-        /// Searches for text in the terminal.
-        SearchTest,
-        /// Scrolls up by one line.
-        ScrollLineUp,
-        /// Scrolls down by one line.
-        ScrollLineDown,
-        /// Scrolls up by one page.
-        ScrollPageUp,
-        /// Scrolls down by one page.
-        ScrollPageDown,
-        /// Scrolls up by half a page.
-        ScrollHalfPageUp,
-        /// Scrolls down by half a page.
-        ScrollHalfPageDown,
-        /// Scrolls to the top of the terminal buffer.
-        ScrollToTop,
-        /// Scrolls to the bottom of the terminal buffer.
-        ScrollToBottom,
-        /// Toggles vi mode in the terminal.
-        ToggleViMode,
-        /// Selects all text in the terminal.
-        SelectAll,
-    ]
-);
-
 const DEBUG_TERMINAL_WIDTH: Pixels = px(500.);
 const DEBUG_TERMINAL_HEIGHT: Pixels = px(30.);
 const DEBUG_CELL_WIDTH: Pixels = px(5.);
@@ -695,20 +564,6 @@ pub enum MaybeNavigationTarget {
 #[derive(Clone)]
 enum InternalEvent {
     Resize(TerminalBounds),
-    Clear,
-    // FocusNextMatch,
-    Scroll(Scroll),
-    ScrollToPoint(Point),
-    SetSelection(Option<Selection>),
-    UpdateSelection(GpuiPoint<Pixels>),
-    FindHyperlink(GpuiPoint<Pixels>, bool),
-    ProcessHyperlink(HyperlinkMatch, bool),
-    // Whether keep selection when copy
-    Copy(Option<bool>),
-    // Vi mode events
-    ToggleViMode,
-    ViMotion(ViMotion),
-    MoveViCursorToPoint(Point),
 }
 
 type ClipboardFormatter = Arc<dyn Fn(&str) -> String + Sync + Send + 'static>;
@@ -1021,21 +876,11 @@ impl TerminalBuilder {
                 terminal_bounds,
                 ..Default::default()
             },
-            last_mouse: None,
-            mouse_down_position: None,
             matches: Vec::new(),
 
             selection_head: None,
             breadcrumb_text: String::new(),
-            scroll_px: px(0.),
-            next_link_id: 0,
-            selection_phase: SelectionPhase::Ended,
-            hyperlink_regex_searches: RegexSearches::default(),
-            vi_mode_enabled: false,
             is_remote_terminal: false,
-            last_mouse_move_time: Instant::now(),
-            last_hyperlink_search_position: None,
-            mouse_down_hyperlink: None,
             #[cfg(windows)]
             shell_program: None,
             activation_script: Vec::new(),
@@ -1045,8 +890,6 @@ impl TerminalBuilder {
                 cursor_shape,
                 alternate_scroll,
                 max_scroll_history_lines,
-                path_hyperlink_regexes: Vec::default(),
-                path_hyperlink_timeout: Duration::ZERO,
                 window_id,
             },
             child_exited: None,
@@ -1060,8 +903,6 @@ impl TerminalBuilder {
             pending_cwd_boundary: None,
             #[cfg(any(test, feature = "test-support"))]
             input_log: Vec::new(),
-            #[cfg(test)]
-            suppress_hyperlink_throttle_once: false,
             #[cfg(any(test, feature = "test-support"))]
             pty_write_log: Default::default(),
         };
@@ -1080,8 +921,6 @@ impl TerminalBuilder {
         cursor_shape: SettingsCursorShape,
         alternate_scroll: AlternateScroll,
         max_scroll_history_lines: Option<usize>,
-        path_hyperlink_regexes: Vec<String>,
-        path_hyperlink_timeout: Duration,
         is_remote_terminal: bool,
         window_id: u64,
         cx: &App,
@@ -1305,24 +1144,11 @@ impl TerminalBuilder {
                 title_override: terminal_title_override,
                 events: VecDeque::with_capacity(10), //Should never get this high.
                 last_content: Default::default(),
-                last_mouse: None,
-                mouse_down_position: None,
                 matches: Vec::new(),
 
                 selection_head: None,
                 breadcrumb_text: String::new(),
-                scroll_px: px(0.),
-                next_link_id: 0,
-                selection_phase: SelectionPhase::Ended,
-                hyperlink_regex_searches: RegexSearches::new(
-                    &path_hyperlink_regexes,
-                    path_hyperlink_timeout,
-                ),
-                vi_mode_enabled: false,
                 is_remote_terminal,
-                last_mouse_move_time: Instant::now(),
-                last_hyperlink_search_position: None,
-                mouse_down_hyperlink: None,
                 #[cfg(windows)]
                 shell_program,
                 activation_script: activation_script.clone(),
@@ -1332,8 +1158,6 @@ impl TerminalBuilder {
                     cursor_shape,
                     alternate_scroll,
                     max_scroll_history_lines,
-                    path_hyperlink_regexes,
-                    path_hyperlink_timeout,
                     window_id,
                 },
                 child_exited: None,
@@ -1359,8 +1183,6 @@ impl TerminalBuilder {
                 pending_cwd_boundary: None,
                 #[cfg(any(test, feature = "test-support"))]
                 input_log: Vec::new(),
-                #[cfg(test)]
-                suppress_hyperlink_throttle_once: false,
                 #[cfg(any(test, feature = "test-support"))]
                 pty_write_log: Default::default(),
             };
@@ -1503,27 +1325,14 @@ pub struct Terminal {
     term_config: AlacrittyTermConfig,
     output_processor: Processor<StdSyncHandler>,
     events: VecDeque<InternalEvent>,
-    /// This is only used for mouse mode cell change detection
-    last_mouse: Option<(Point, SelectionSide)>,
-    /// Window-relative position of the most recent left mouse-down. Used to
-    /// apply a drag threshold before starting a selection (see #58970).
-    mouse_down_position: Option<GpuiPoint<Pixels>>,
     pub matches: Vec<Range>,
     pub last_content: Content,
     pub selection_head: Option<Point>,
 
     pub breadcrumb_text: String,
     title_override: Option<String>,
-    scroll_px: Pixels,
-    next_link_id: usize,
-    selection_phase: SelectionPhase,
-    hyperlink_regex_searches: RegexSearches,
     task: Option<TaskState>,
-    vi_mode_enabled: bool,
     is_remote_terminal: bool,
-    last_mouse_move_time: Instant,
-    last_hyperlink_search_position: Option<GpuiPoint<Pixels>>,
-    mouse_down_hyperlink: Option<HyperlinkMatch>,
     #[cfg(windows)]
     shell_program: Option<String>,
     template: CopyTemplate,
@@ -1539,8 +1348,6 @@ pub struct Terminal {
     pending_cwd_boundary: Option<i32>,
     #[cfg(any(test, feature = "test-support"))]
     input_log: Vec<Vec<u8>>,
-    #[cfg(test)]
-    suppress_hyperlink_throttle_once: bool,
     #[cfg(any(test, feature = "test-support"))]
     pty_write_log: std::cell::RefCell<Vec<Vec<u8>>>,
 }
@@ -1558,8 +1365,6 @@ struct CopyTemplate {
     cursor_shape: SettingsCursorShape,
     alternate_scroll: AlternateScroll,
     max_scroll_history_lines: Option<usize>,
-    path_hyperlink_regexes: Vec<String>,
-    path_hyperlink_timeout: Duration,
     window_id: u64,
 }
 
@@ -1598,15 +1403,6 @@ impl TaskStatus {
         };
     }
 }
-
-const FIND_HYPERLINK_THROTTLE_PX: Pixels = px(5.0);
-const FIND_HYPERLINK_THROTTLE: Duration = Duration::from_millis(100);
-
-/// Minimum pointer movement before a left click begins a selection. This keeps
-/// a click that jitters by a pixel or two (such as the window-focusing click)
-/// from starting a selection and, with `copy_on_select` enabled, clobbering the
-/// clipboard. Mirrors the drag threshold used by gpui's `div` element.
-const SELECTION_DRAG_THRESHOLD: f64 = 2.0;
 
 impl Terminal {
     fn process_pty_event(&mut self, event: PtyEvent, cx: &mut Context<Self>) {
@@ -1694,262 +1490,6 @@ impl Terminal {
         }
     }
 
-    pub fn selection_started(&self) -> bool {
-        self.selection_phase == SelectionPhase::Selecting
-    }
-
-#[cfg(feature = "ui")]
-    fn process_terminal_event(
-        &mut self,
-        event: &InternalEvent,
-        term: &mut AlacrittyTerm,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            &InternalEvent::Resize(new_bounds) => {
-                let new_bounds = normalize_terminal_bounds(new_bounds);
-                trace!("Resizing: new_bounds={new_bounds:?}");
-
-                let columns_changed =
-                    self.last_content.terminal_bounds.num_columns() != new_bounds.num_columns();
-                self.last_content.terminal_bounds = new_bounds;
-
-                if let TerminalType::Pty {
-                    resources: PtyResources::Active(pty_tx),
-                    ..
-                } = &self.terminal_type
-                {
-                    pty_tx.resize(new_bounds);
-                }
-
-                resize(term, new_bounds);
-                if columns_changed {
-                    self.reset_cwd_history();
-                }
-                // If there are matches we need to emit a wake up event to
-                // invalidate the matches and recalculate their locations
-                // in the new terminal layout
-                if !self.matches.is_empty() {
-                    cx.emit(Event::Wakeup);
-                }
-            }
-            InternalEvent::Clear => {
-                trace!("Clearing");
-                clear_saved_screen(term);
-                self.reset_cwd_history();
-                cx.emit(Event::Wakeup);
-            }
-            InternalEvent::Scroll(scroll) => {
-                trace!("Scrolling: scroll={scroll:?}");
-                scroll_display(term, *scroll);
-                self.refresh_hovered_word(window, cx);
-
-                if self.vi_mode_enabled {
-                    update_vi_cursor_for_scroll(term, *scroll);
-                    if let Some(selection_head) = update_selection_to_vi_cursor(term) {
-                        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                        if let Some(selection_text) = selection_text(term) {
-                            cx.write_to_primary(ClipboardItem::new_string(selection_text));
-                        }
-
-                        self.selection_head = Some(selection_head);
-                        cx.emit(Event::SelectionsChanged)
-                    }
-                }
-            }
-            InternalEvent::SetSelection(selection) => {
-                trace!("Setting selection: selection={selection:?}");
-                set_term_selection(term, selection.as_ref());
-
-                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                if let Some(selection_text) = selection_text(term) {
-                    cx.write_to_primary(ClipboardItem::new_string(selection_text));
-                }
-
-                if let Some(selection) = selection {
-                    self.selection_head = Some(selection.head);
-                }
-                cx.emit(Event::SelectionsChanged)
-            }
-            InternalEvent::UpdateSelection(position) => {
-                trace!("Updating selection: position={position:?}");
-                let (point, side) = grid_point_and_side(
-                    *position,
-                    self.last_content.terminal_bounds,
-                    display_offset(term),
-                );
-
-                if update_term_selection(term, point, side) {
-                    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                    if let Some(selection_text) = selection_text(term) {
-                        cx.write_to_primary(ClipboardItem::new_string(selection_text));
-                    }
-
-                    self.selection_head = Some(point);
-                    cx.emit(Event::SelectionsChanged)
-                }
-            }
-
-            InternalEvent::Copy(keep_selection) => {
-                trace!("Copying selection: keep_selection={keep_selection:?}");
-                if let Some(txt) = selection_text(term) {
-                    cx.write_to_clipboard(ClipboardItem::new_string(txt));
-                    if !keep_selection.unwrap_or_else(|| {
-                        let settings = TerminalSettings::get_global(cx);
-                        settings.keep_selection_on_copy
-                    }) {
-                        self.events.push_back(InternalEvent::SetSelection(None));
-                    }
-                }
-            }
-            InternalEvent::ScrollToPoint(point) => {
-                trace!("Scrolling to point: point={point:?}");
-                scroll_to_point(term, *point);
-                self.refresh_hovered_word(window, cx);
-            }
-            InternalEvent::MoveViCursorToPoint(point) => {
-                trace!("Move vi cursor to point: point={point:?}");
-                vi_goto_point(term, *point);
-                self.refresh_hovered_word(window, cx);
-            }
-            InternalEvent::ToggleViMode => {
-                trace!("Toggling vi mode");
-                self.vi_mode_enabled = !self.vi_mode_enabled;
-                toggle_term_vi_mode(term);
-            }
-            InternalEvent::ViMotion(motion) => {
-                trace!("Performing vi motion: motion={motion:?}");
-                vi_motion(term, *motion);
-            }
-            InternalEvent::FindHyperlink(position, open) => {
-                trace!("Finding hyperlink at position: position={position:?}, open={open:?}");
-
-                let point = grid_point(
-                    *position,
-                    self.last_content.terminal_bounds,
-                    display_offset(term),
-                );
-
-                match find_from_terminal_point(
-                    term,
-                    point,
-                    &mut self.hyperlink_regex_searches,
-                    self.path_style,
-                ) {
-                    Some(hyperlink) => {
-                        let history_size = term.history_size();
-                        self.process_hyperlink(hyperlink, *open, history_size, cx);
-                    }
-                    None => {
-                        self.clear_hyperlink(cx);
-                    }
-                }
-            }
-            InternalEvent::ProcessHyperlink(hyperlink, open) => {
-                // history_size must be read here since process_hyperlink cannot lock term
-                // (sync() already holds the lock when dispatching events)
-                let history_size = term.history_size();
-                self.process_hyperlink(hyperlink.clone(), *open, history_size, cx);
-            }
-        }
-    }
-
-#[cfg(feature = "ui")]
-    fn process_hyperlink(
-        &mut self,
-        hyperlink: HyperlinkMatch,
-        open: bool,
-        history_size: usize,
-        cx: &mut Context<Self>,
-    ) {
-        let HyperlinkMatch {
-            text: maybe_url_or_path,
-            is_url,
-            range,
-        } = hyperlink;
-        let prev_hovered_word = self.last_content.last_hovered_word.take();
-        let match_line = range.start().line;
-        let working_directory = self.cwd_at_line(match_line, history_size);
-
-        let target = if is_url {
-            if let Some(path) = maybe_url_or_path.strip_prefix("file://") {
-                let decoded_path = urlencoding::decode(path)
-                    .map(|decoded| decoded.into_owned())
-                    .unwrap_or(path.to_owned());
-
-                MaybeNavigationTarget::PathLike(PathLikeTarget {
-                    maybe_path: decoded_path,
-                    working_directory,
-                })
-            } else {
-                MaybeNavigationTarget::Url(maybe_url_or_path.clone())
-            }
-        } else {
-            MaybeNavigationTarget::PathLike(PathLikeTarget {
-                maybe_path: maybe_url_or_path.clone(),
-                working_directory,
-            })
-        };
-
-        if open {
-            cx.emit(Event::Open(target));
-        } else {
-            self.update_selected_word(prev_hovered_word, range, maybe_url_or_path, target, cx);
-        }
-    }
-
-#[cfg(feature = "ui")]
-    fn clear_hyperlink(&mut self, cx: &mut Context<Self>) {
-        if self.last_content.last_hovered_word.take().is_some() {
-            cx.emit(Event::NewNavigationTarget(None));
-        }
-    }
-
-#[cfg(feature = "ui")]
-    fn find_hyperlink_at_point(&mut self, point: Point) -> Option<HyperlinkMatch> {
-        let term_lock = self.term.lock();
-        find_from_terminal_point(
-            &term_lock,
-            point,
-            &mut self.hyperlink_regex_searches,
-            self.path_style,
-        )
-    }
-
-#[cfg(feature = "ui")]
-    fn update_selected_word(
-        &mut self,
-        prev_word: Option<HoveredWord>,
-        word_match: Range,
-        word: String,
-        navigation_target: MaybeNavigationTarget,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(prev_word) = prev_word
-            && prev_word.word == word
-            && prev_word.word_match == word_match
-        {
-            self.last_content.last_hovered_word = Some(prev_word);
-            return;
-        }
-
-        self.last_content.last_hovered_word = Some(HoveredWord {
-            word,
-            word_match,
-            id: self.next_link_id(),
-        });
-        cx.emit(Event::NewNavigationTarget(Some(navigation_target)));
-        cx.notify()
-    }
-
-#[cfg(feature = "ui")]
-    fn next_link_id(&mut self) -> usize {
-        let res = self.next_link_id;
-        self.next_link_id = self.next_link_id.wrapping_add(1);
-        res
-    }
-
     pub fn last_content(&self) -> &Content {
         &self.last_content
     }
@@ -1984,94 +1524,8 @@ impl Terminal {
         used_lines(&self.term.lock_unfair())
     }
 
-    //To test:
-    //- Activate match on terminal (scrolling and selection)
-    //- Editor search snapping behavior
-
-    pub fn activate_match(&mut self, index: usize) {
-        if let Some(search_match) = self.matches.get(index).cloned() {
-            self.set_selection(Some(Selection::simple_range(search_match)));
-            if self.vi_mode_enabled {
-                self.events
-                    .push_back(InternalEvent::MoveViCursorToPoint(search_match.end()));
-            } else {
-                self.events
-                    .push_back(InternalEvent::ScrollToPoint(search_match.start()));
-            }
-        }
-    }
-
-    pub fn select_matches(&mut self, matches: &[Range]) {
-        let matches_to_select = self
-            .matches
-            .iter()
-            .filter(|self_match| matches.contains(self_match))
-            .cloned()
-            .collect::<Vec<_>>();
-        for match_to_select in matches_to_select {
-            self.set_selection(Some(Selection::simple_range(match_to_select)));
-        }
-    }
-
-    pub fn select_all(&mut self) {
-        let term = self.term.lock();
-        let range = full_content_range(&term);
-        drop(term);
-        self.set_selection(Some(Selection::simple_range(range)));
-    }
-
-    fn set_selection(&mut self, selection: Option<Selection>) {
-        self.events
-            .push_back(InternalEvent::SetSelection(selection));
-    }
-
-    pub fn copy(&mut self, keep_selection: Option<bool>) {
-        self.events.push_back(InternalEvent::Copy(keep_selection));
-    }
-
-    pub fn clear(&mut self) {
-        self.events.push_back(InternalEvent::Clear)
-    }
-
     pub fn shrink_to_used(&mut self) {
         shrink_to_used(&mut self.term.lock());
-    }
-
-    pub fn scroll_line_up(&mut self) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(1)));
-    }
-
-    pub fn scroll_up_by(&mut self, lines: usize) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(lines as i32)));
-    }
-
-    pub fn scroll_line_down(&mut self) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(-1)));
-    }
-
-    pub fn scroll_down_by(&mut self, lines: usize) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(-(lines as i32))));
-    }
-
-    pub fn scroll_page_up(&mut self) {
-        self.events.push_back(InternalEvent::Scroll(Scroll::PageUp));
-    }
-
-    pub fn scroll_page_down(&mut self) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::PageDown));
-    }
-
-    pub fn scroll_to_top(&mut self) {
-        self.events.push_back(InternalEvent::Scroll(Scroll::Top));
-    }
-
-    pub fn scroll_to_bottom(&mut self) {
-        self.events.push_back(InternalEvent::Scroll(Scroll::Bottom));
     }
 
     pub fn scrolled_to_top(&self) -> bool {
@@ -2244,8 +1698,6 @@ impl Terminal {
             ));
         }
 
-        self.events.push_back(InternalEvent::Scroll(Scroll::Bottom));
-        self.events.push_back(InternalEvent::SetSelection(None));
         #[cfg(any(test, feature = "test-support"))]
         self.input_log.push(input.to_vec());
 
@@ -2267,115 +1719,7 @@ impl Terminal {
         self.keyboard_input_sent
     }
 
-    pub fn toggle_vi_mode(&mut self) {
-        self.events.push_back(InternalEvent::ToggleViMode);
-    }
-
-    pub fn vi_motion(&mut self, keystroke: &Keystroke) {
-        if !self.vi_mode_enabled {
-            return;
-        }
-
-        let key: Cow<'_, str> = if keystroke.modifiers.shift {
-            Cow::Owned(keystroke.key.to_uppercase())
-        } else {
-            Cow::Borrowed(keystroke.key.as_str())
-        };
-
-        let motion: Option<ViMotion> = match key.as_ref() {
-            "h" | "left" => Some(ViMotion::Left),
-            "j" | "down" => Some(ViMotion::Down),
-            "k" | "up" => Some(ViMotion::Up),
-            "l" | "right" => Some(ViMotion::Right),
-            "w" => Some(ViMotion::WordRight),
-            "b" if !keystroke.modifiers.control => Some(ViMotion::WordLeft),
-            "e" => Some(ViMotion::WordRightEnd),
-            "%" => Some(ViMotion::Bracket),
-            "$" => Some(ViMotion::Last),
-            "0" => Some(ViMotion::First),
-            "^" => Some(ViMotion::FirstOccupied),
-            "H" => Some(ViMotion::High),
-            "M" => Some(ViMotion::Middle),
-            "L" => Some(ViMotion::Low),
-            "{" => Some(ViMotion::ParagraphUp),
-            "}" => Some(ViMotion::ParagraphDown),
-            _ => None,
-        };
-
-        if let Some(motion) = motion {
-            let cursor = self.last_content.cursor.point;
-            let cursor_pos = GpuiPoint {
-                x: cursor.column as f32 * self.last_content.terminal_bounds.cell_width,
-                y: cursor.line as f32 * self.last_content.terminal_bounds.line_height,
-            };
-            self.events
-                .push_back(InternalEvent::UpdateSelection(cursor_pos));
-            self.events.push_back(InternalEvent::ViMotion(motion));
-            return;
-        }
-
-        let scroll_motion = match key.as_ref() {
-            "g" => Some(Scroll::Top),
-            "G" => Some(Scroll::Bottom),
-            "b" if keystroke.modifiers.control => Some(Scroll::PageUp),
-            "f" if keystroke.modifiers.control => Some(Scroll::PageDown),
-            "d" if keystroke.modifiers.control => {
-                let amount = self.last_content.terminal_bounds.line_height().to_f64() as i32 / 2;
-                Some(Scroll::Delta(-amount))
-            }
-            "u" if keystroke.modifiers.control => {
-                let amount = self.last_content.terminal_bounds.line_height().to_f64() as i32 / 2;
-                Some(Scroll::Delta(amount))
-            }
-            _ => None,
-        };
-
-        if let Some(scroll_motion) = scroll_motion {
-            self.events.push_back(InternalEvent::Scroll(scroll_motion));
-            return;
-        }
-
-        match key.as_ref() {
-            "v" => {
-                let point = self.last_content.cursor.point;
-                let selection_type = SelectionType::Simple;
-                let side = SelectionSide::Right;
-                let selection = Selection::new(selection_type, point, side);
-                self.events
-                    .push_back(InternalEvent::SetSelection(Some(selection)));
-            }
-
-            "V" => {
-                let point = self.last_content.cursor.point;
-                let selection_type = SelectionType::Lines;
-                let side = SelectionSide::Right;
-                let selection = Selection::new(selection_type, point, side);
-                self.events
-                    .push_back(InternalEvent::SetSelection(Some(selection)));
-            }
-
-            "escape" => {
-                self.events.push_back(InternalEvent::SetSelection(None));
-            }
-
-            "y" => {
-                self.copy(Some(false));
-            }
-
-            "i" => {
-                self.scroll_to_bottom();
-                self.toggle_vi_mode();
-            }
-            _ => {}
-        }
-    }
-
     pub fn try_keystroke(&mut self, keystroke: &Keystroke, option_as_meta: bool) -> bool {
-        if self.vi_mode_enabled {
-            self.vi_motion(keystroke);
-            return true;
-        }
-
         // Keep default terminal behavior
         let esc = to_esc_str(keystroke, self.last_content.mode, option_as_meta);
         if let Some(esc) = esc {
@@ -2389,16 +1733,6 @@ impl Terminal {
         }
     }
 
-#[cfg(feature = "ui")]
-    pub fn try_modifiers_change(
-        &mut self,
-        modifiers: &Modifiers,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.schedule_find_hyperlink(*modifiers, window.mouse_position(), cx);
-    }
-
     ///Paste text into the terminal
     pub fn paste(&mut self, text: &str) {
         let paste_text = if self.last_content.mode.contains(Modes::BRACKETED_PASTE) {
@@ -2408,28 +1742,6 @@ impl Terminal {
         };
 
         self.input(paste_text.into_bytes());
-    }
-
-#[cfg(feature = "ui")]
-    pub fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let term = self.term.clone();
-        let mut terminal = term.lock_unfair();
-        //Note that the ordering of events matters for event processing
-        while let Some(e) = self.events.pop_front() {
-            self.process_terminal_event(&e, &mut terminal, window, cx)
-        }
-
-        self.last_content = make_content(&terminal, &self.last_content);
-        if self.last_content.grid_lines_change == GridLinesChange::Changed {
-            debug_assert!(self.last_content.last_hovered_word.is_none());
-            self.refresh_hovered_word(window, cx);
-
-            // Because refresh_hovered_word() may result
-            // in new events, but will not trigger a repaint
-            if !self.events.is_empty() {
-                cx.emit(Event::Wakeup);
-            }
-        }
     }
 
     pub fn with_renderable_cells<R>(&self, f: impl for<'a> FnOnce(RenderableCells<'a>) -> R) -> R {
@@ -2460,425 +1772,8 @@ impl Terminal {
         }
     }
 
-#[cfg(feature = "ui")]
-    fn mouse_changed(&mut self, point: Point, side: SelectionSide) -> bool {
-        match self.last_mouse {
-            Some((old_point, old_side)) => {
-                if old_point == point && old_side == side {
-                    false
-                } else {
-                    self.last_mouse = Some((point, side));
-                    true
-                }
-            }
-            None => {
-                self.last_mouse = Some((point, side));
-                true
-            }
-        }
-    }
-
     pub fn mouse_mode(&self, shift: bool) -> bool {
         self.last_content.mode.intersects(Modes::MOUSE_MODE) && !shift
-    }
-
-#[cfg(feature = "ui")]
-    pub fn mouse_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<Self>) {
-        let position = e.position - self.last_content.terminal_bounds.bounds.origin;
-        if self.mouse_mode(e.modifiers.shift) {
-            // A ctrl/cmd press on a link suppressed its button-press report in
-            // `mouse_down`. Since the app never saw the press, we must swallow
-            // the whole gesture rather than forward later motion/release
-            // reports, which would be a press-less (malformed) sequence.
-            // `mouse_up` resolves it: release on the same link opens it,
-            // otherwise the gesture is dropped.
-            if self.mouse_down_hyperlink.is_none() {
-                let (point, side) = grid_point_and_side(
-                    position,
-                    self.last_content.terminal_bounds,
-                    self.last_content.display_offset,
-                );
-
-                if self.mouse_changed(point, side) {
-                    let bytes = mouse_moved_report(
-                        point,
-                        e.pressed_button,
-                        e.modifiers,
-                        self.last_content.mode,
-                    );
-
-                    if let Some(bytes) = bytes {
-                        self.write_to_pty(bytes);
-                    }
-                }
-            }
-        } else {
-            self.schedule_find_hyperlink(e.modifiers, e.position, cx);
-        }
-        cx.notify();
-    }
-
-#[cfg(feature = "ui")]
-    fn schedule_find_hyperlink(
-        &mut self,
-        modifiers: Modifiers,
-        position: GpuiPoint<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        if self.selection_phase == SelectionPhase::Selecting
-            || !modifiers.secondary()
-            || !self.last_content.terminal_bounds.bounds.contains(&position)
-        {
-            self.clear_hyperlink(cx);
-            return;
-        }
-
-        // Throttle hyperlink searches to avoid excessive processing
-        let now = Instant::now();
-        let throttle = !self
-            .last_hyperlink_search_position
-            .map_or(true, |last_pos| {
-                // Only search if mouse moved significantly or enough time passed
-                let distance_moved = ((position.x - last_pos.x).abs()
-                    + (position.y - last_pos.y).abs())
-                    > FIND_HYPERLINK_THROTTLE_PX;
-                let time_elapsed =
-                    now.duration_since(self.last_mouse_move_time) > FIND_HYPERLINK_THROTTLE;
-                distance_moved || time_elapsed
-            });
-
-        #[cfg(test)]
-        let throttle = if self.suppress_hyperlink_throttle_once {
-            self.suppress_hyperlink_throttle_once = false;
-            false
-        } else {
-            throttle
-        };
-
-        if throttle {
-            return;
-        }
-
-        self.last_mouse_move_time = now;
-        self.last_hyperlink_search_position = Some(position);
-        self.events.push_back(InternalEvent::FindHyperlink(
-            position - self.last_content.terminal_bounds.bounds.origin,
-            false,
-        ));
-        cx.notify();
-    }
-
-#[cfg(feature = "ui")]
-    pub fn select_word_at_event_position(&mut self, e: &MouseDownEvent) {
-        let position = e.position - self.last_content.terminal_bounds.bounds.origin;
-        let (point, side) = grid_point_and_side(
-            position,
-            self.last_content.terminal_bounds,
-            self.last_content.display_offset,
-        );
-        let selection = Selection::new(SelectionType::Semantic, point, side);
-        self.events
-            .push_back(InternalEvent::SetSelection(Some(selection)));
-    }
-
-#[cfg(feature = "ui")]
-    pub fn mouse_drag(
-        &mut self,
-        e: &MouseMoveEvent,
-        region: Bounds<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        let position = e.position - self.last_content.terminal_bounds.bounds.origin;
-        if !self.mouse_mode(e.modifiers.shift) {
-            if let Some(hyperlink) = &self.mouse_down_hyperlink {
-                let point = grid_point(
-                    position,
-                    self.last_content.terminal_bounds,
-                    self.last_content.display_offset,
-                );
-
-                if !hyperlink.range.contains(point) {
-                    self.mouse_down_hyperlink = None;
-                } else {
-                    return;
-                }
-            }
-
-            // Ignore tiny pointer movements so that a click that jitters by a
-            // pixel or two (e.g. the window-focusing click) does not begin a
-            // selection. Mirrors the drag threshold used by gpui's `div`.
-            if self.selection_phase != SelectionPhase::Selecting
-                && let Some(mouse_down_position) = self.mouse_down_position
-                && (e.position - mouse_down_position).magnitude() <= SELECTION_DRAG_THRESHOLD
-            {
-                return;
-            }
-
-            self.selection_phase = SelectionPhase::Selecting;
-            // Alacritty has the same ordering, of first updating the selection
-            // then scrolling 15ms later
-            self.events
-                .push_back(InternalEvent::UpdateSelection(position));
-
-            // Doesn't make sense to scroll the alt screen
-            if !self.last_content.mode.contains(Modes::ALT_SCREEN) {
-                let scroll_lines = match self.drag_line_delta(e, region) {
-                    Some(value) => value,
-                    None => return,
-                };
-
-                self.events
-                    .push_back(InternalEvent::Scroll(Scroll::Delta(scroll_lines)));
-            }
-
-            cx.notify();
-        }
-    }
-
-#[cfg(feature = "ui")]
-    fn drag_line_delta(&self, e: &MouseMoveEvent, region: Bounds<Pixels>) -> Option<i32> {
-        let top = region.origin.y;
-        let bottom = region.bottom_left().y;
-
-        let scroll_lines = if e.position.y < top {
-            let scroll_delta = (top - e.position.y).pow(1.1);
-            (scroll_delta / self.last_content.terminal_bounds.line_height).ceil() as i32
-        } else if e.position.y > bottom {
-            let scroll_delta = -((e.position.y - bottom).pow(1.1));
-            (scroll_delta / self.last_content.terminal_bounds.line_height).floor() as i32
-        } else {
-            return None;
-        };
-
-        Some(scroll_lines.clamp(-3, 3))
-    }
-
-#[cfg(feature = "ui")]
-    pub fn mouse_down(&mut self, e: &MouseDownEvent, cx: &mut Context<Self>) {
-        let position = e.position - self.last_content.terminal_bounds.bounds.origin;
-        let point = grid_point(
-            position,
-            self.last_content.terminal_bounds,
-            self.last_content.display_offset,
-        );
-
-        if e.button == MouseButton::Left
-            && e.modifiers.secondary()
-            && (TerminalSettings::get_global(cx).open_links_in_mouse_mode
-                || !self.mouse_mode(e.modifiers.shift))
-        {
-            self.mouse_down_hyperlink = self.find_hyperlink_at_point(point);
-
-            if self.mouse_down_hyperlink.is_some() {
-                return;
-            }
-        }
-
-        if self.mouse_mode(e.modifiers.shift) {
-            let bytes =
-                mouse_button_report(point, e.button, e.modifiers, true, self.last_content.mode);
-
-            if let Some(bytes) = bytes {
-                self.write_to_pty(bytes);
-            }
-        } else {
-            match e.button {
-                MouseButton::Left => {
-                    self.mouse_down_position = Some(e.position);
-                    let (point, side) = grid_point_and_side(
-                        position,
-                        self.last_content.terminal_bounds,
-                        self.last_content.display_offset,
-                    );
-
-                    let selection_type = match e.click_count {
-                        0 => return, //This is a release
-                        1 => Some(SelectionType::Simple),
-                        2 => Some(SelectionType::Semantic),
-                        3 => Some(SelectionType::Lines),
-                        _ => None,
-                    };
-
-                    if selection_type == Some(SelectionType::Simple) && e.modifiers.shift {
-                        if self.last_content.selection.is_some() {
-                            // Shift+click extends the existing selection to this point.
-                            self.events
-                                .push_back(InternalEvent::UpdateSelection(position));
-                        } else {
-                            // With no selection yet, Shift is the escape hatch for
-                            // selecting text while an app has mouse tracking enabled,
-                            // so anchor a selection here for the drag to extend.
-                            self.events.push_back(InternalEvent::SetSelection(Some(
-                                Selection::new(SelectionType::Simple, point, side),
-                            )));
-                        }
-                        return;
-                    }
-
-                    let selection = selection_type
-                        .map(|selection_type| Selection::new(selection_type, point, side));
-
-                    if let Some(selection) = selection {
-                        self.events
-                            .push_back(InternalEvent::SetSelection(Some(selection)));
-                    }
-                }
-                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                MouseButton::Middle => {
-                    if let Some(item) = cx.read_from_primary() {
-                        let text = item.text().unwrap_or_default();
-                        self.paste(&text);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-#[cfg(feature = "ui")]
-    pub fn mouse_up(&mut self, e: &MouseUpEvent, cx: &Context<Self>) {
-        let setting = TerminalSettings::get_global(cx);
-
-        let position = e.position - self.last_content.terminal_bounds.bounds.origin;
-        if let Some(mouse_down_hyperlink) = self.mouse_down_hyperlink.take() {
-            let point = grid_point(
-                position,
-                self.last_content.terminal_bounds,
-                self.last_content.display_offset,
-            );
-
-            if self
-                .find_hyperlink_at_point(point)
-                .is_some_and(|mouse_up_hyperlink| mouse_up_hyperlink == mouse_down_hyperlink)
-            {
-                self.events
-                    .push_back(InternalEvent::ProcessHyperlink(mouse_down_hyperlink, true));
-                self.selection_phase = SelectionPhase::Ended;
-                self.last_mouse = None;
-                self.mouse_down_position = None;
-                return;
-            }
-
-            if self.mouse_mode(e.modifiers.shift) {
-                self.selection_phase = SelectionPhase::Ended;
-                self.last_mouse = None;
-                self.mouse_down_position = None;
-                return;
-            }
-        }
-
-        if self.mouse_mode(e.modifiers.shift) {
-            let point = grid_point(
-                position,
-                self.last_content.terminal_bounds,
-                self.last_content.display_offset,
-            );
-
-            let bytes =
-                mouse_button_report(point, e.button, e.modifiers, false, self.last_content.mode);
-
-            if let Some(bytes) = bytes {
-                self.write_to_pty(bytes);
-            }
-        } else {
-            if e.button == MouseButton::Left && setting.copy_on_select {
-                self.copy(Some(true));
-            }
-
-            //Hyperlinks
-            if self.selection_phase == SelectionPhase::Ended {
-                let mouse_cell_index =
-                    content_index_for_mouse(position, &self.last_content.terminal_bounds);
-                if let Some(link) = self
-                    .last_content
-                    .cells
-                    .get(mouse_cell_index)
-                    .and_then(|cell| cell.hyperlink())
-                {
-                    cx.open_url(link.uri());
-                } else if e.modifiers.secondary() {
-                    self.events
-                        .push_back(InternalEvent::FindHyperlink(position, true));
-                }
-            }
-        }
-
-        self.selection_phase = SelectionPhase::Ended;
-        self.last_mouse = None;
-        self.mouse_down_position = None;
-    }
-
-    ///Scroll the terminal
-#[cfg(feature = "ui")]
-    pub fn scroll_wheel(&mut self, e: &ScrollWheelEvent, scroll_multiplier: f32) {
-        let mouse_mode = self.mouse_mode(e.shift);
-        let scroll_multiplier = if mouse_mode { 1. } else { scroll_multiplier };
-
-        if let Some(scroll_lines) = self.determine_scroll_lines(e, scroll_multiplier)
-            && scroll_lines != 0
-        {
-            if mouse_mode {
-                let point = grid_point(
-                    e.position - self.last_content.terminal_bounds.bounds.origin,
-                    self.last_content.terminal_bounds,
-                    self.last_content.display_offset,
-                );
-
-                if let Some(scrolls) = scroll_report(point, scroll_lines, e, self.last_content.mode)
-                {
-                    for scroll in scrolls {
-                        self.write_to_pty(scroll);
-                    }
-                };
-            } else if self
-                .last_content
-                .mode
-                .contains(Modes::ALT_SCREEN | Modes::ALTERNATE_SCROLL)
-                && !e.shift
-            {
-                self.write_to_pty(alt_scroll(scroll_lines));
-            } else {
-                self.events
-                    .push_back(InternalEvent::Scroll(Scroll::Delta(scroll_lines)));
-            }
-        }
-    }
-
-#[cfg(feature = "ui")]
-    fn refresh_hovered_word(&mut self, window: &Window, cx: &mut Context<Self>) {
-        self.schedule_find_hyperlink(window.modifiers(), window.mouse_position(), cx);
-    }
-
-#[cfg(feature = "ui")]
-    fn determine_scroll_lines(
-        &mut self,
-        e: &ScrollWheelEvent,
-        scroll_multiplier: f32,
-    ) -> Option<i32> {
-        let line_height = self.last_content.terminal_bounds.line_height;
-        match e.touch_phase {
-            /* Reset scroll state on started */
-            TouchPhase::Started => {
-                self.scroll_px = px(0.);
-                None
-            }
-            /* Calculate the appropriate scroll lines */
-            TouchPhase::Moved => {
-                let old_offset = (self.scroll_px / line_height) as i32;
-
-                self.scroll_px += e.delta.pixel_delta(line_height).y * scroll_multiplier;
-
-                let new_offset = (self.scroll_px / line_height) as i32;
-
-                // Whenever we hit the edges, reset our stored scroll to 0
-                // so we can respond to changes in direction quickly
-                self.scroll_px %= self.last_content.terminal_bounds.height();
-
-                Some(new_offset - old_offset)
-            }
-            // Cancellation does not commit a scroll, same as a plain end.
-            TouchPhase::Ended | TouchPhase::Cancelled => None,
-        }
     }
 
     pub fn find_matches(&self, searcher: Search, cx: &Context<Self>) -> Task<Vec<Range>> {
@@ -2957,6 +1852,7 @@ impl Terminal {
             .unwrap_or_default();
     }
 
+    #[cfg(test)]
     fn cwd_at_line(&self, line: i32, history_size: usize) -> Option<PathBuf> {
         // Once the scrollback cap is reached, evictions move retained lines without changing
         // `history_size`, so stored row offsets no longer identify their original lines.
@@ -3194,10 +2090,6 @@ impl Terminal {
         }
     }
 
-    pub fn vi_mode_enabled(&self) -> bool {
-        self.vi_mode_enabled
-    }
-
     pub fn clone_builder(&self, cx: &App, cwd: Option<PathBuf>) -> Task<Result<TerminalBuilder>> {
         let working_directory = self.working_directory().or_else(|| cwd);
         TerminalBuilder::new(
@@ -3208,8 +2100,6 @@ impl Terminal {
             self.template.cursor_shape,
             self.template.alternate_scroll,
             self.template.max_scroll_history_lines,
-            self.template.path_hyperlink_regexes.clone(),
-            self.template.path_hyperlink_timeout,
             self.is_remote_terminal,
             self.template.window_id,
             cx,
@@ -3477,14 +2367,6 @@ fn normalize_script_command_name(argument: &str) -> Option<String> {
         .and_then(normalize_path_command_name)
 }
 
-fn content_index_for_mouse(pos: GpuiPoint<Pixels>, terminal_bounds: &TerminalBounds) -> usize {
-    let col = (pos.x / terminal_bounds.cell_width()).round() as usize;
-    let clamped_col = min(col, terminal_bounds.num_columns().saturating_sub(1));
-    let row = (pos.y / terminal_bounds.line_height()).round() as usize;
-    let clamped_row = min(row, terminal_bounds.num_lines().saturating_sub(1));
-    clamped_row * terminal_bounds.num_columns() + clamped_col
-}
-
 /// Converts an 8 bit ANSI color to its GPUI equivalent.
 /// Accepts `usize` for compatibility with the `alacritty::Colors` interface,
 /// Other than that use case, should only be called with values in the `[0,255]` range
@@ -3580,16 +2462,10 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::{
-        Cell, Content, IndexedCell, TerminalBounds, TerminalBuilder, content_index_for_mouse,
-        rgb_for_index,
-    };
+    use crate::{TerminalBounds, TerminalBuilder, rgb_for_index};
     use collections::HashMap;
-    use gpui::{
-        ClipboardItem, Entity, Pixels, TestAppContext, bounds, point, size,
-    };
+    use gpui::{ClipboardItem, Entity, Pixels, TestAppContext, bounds, size};
     use parking_lot::Mutex;
-    use rand::{Rng, distr, rngs::StdRng};
     use task::{Shell, ShellBuilder};
 
     #[test]
@@ -3745,8 +2621,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -3789,8 +2663,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -3848,69 +2720,6 @@ mod tests {
         assert_content_eventually(&terminal, "hello-from-subprocess", cx).await;
     }
 
-    fn init_terminal_test(cx: &mut TestAppContext, output: &[u8]) -> Entity<Terminal> {
-        cx.update(|cx| {
-            let settings_store = settings::SettingsStore::test(cx);
-            cx.set_global(settings_store);
-        });
-
-        let terminal = cx.new(|cx| {
-            TerminalBuilder::new_display_only(
-                SettingsCursorShape::default(),
-                AlternateScroll::On,
-                None,
-                0,
-                cx.background_executor(),
-                PathStyle::local(),
-            )
-            .subscribe(cx)
-        });
-
-        terminal.update(cx, |terminal, cx| {
-            terminal.write_output(output, cx);
-        });
-
-        cx.run_until_parked();
-
-        terminal.update(cx, |terminal, _cx| {
-            let term_lock = terminal.term.lock();
-            terminal.last_content = make_content(&term_lock, &terminal.last_content);
-            drop(term_lock);
-
-            let terminal_bounds = TerminalBounds::new(
-                px(20.0),
-                px(10.0),
-                bounds(point(px(0.0), px(0.0)), size(px(400.0), px(400.0))),
-            );
-            terminal.last_content.terminal_bounds = terminal_bounds;
-            terminal.events.clear();
-            terminal.take_pty_write_log();
-        });
-
-        terminal
-    }
-
-    async fn test_basic_terminal(cx: &mut TestAppContext) {
-        cx.executor().allow_parking();
-
-        let terminal = build_test_terminal(cx, "echo", &["hello"]).await;
-        let exit_status =
-            terminal.read_with(cx, |terminal, cx| terminal.wait_for_completed_task(cx));
-        assert_eq!(exit_status.await, Some(ExitStatus::default()));
-        assert_content_eventually(&terminal, "hello", cx).await;
-
-        // Inject additional output directly into the emulator (display-only path)
-        terminal.update(cx, |term, cx| {
-            term.write_output(b"\nfrom_injection", cx);
-        });
-
-        let content_after = terminal.update(cx, |term, _| term.get_content());
-        assert!(
-            content_after.contains("from_injection"),
-            "expected injected output to appear, got: {content_after}"
-        );
-    }
-
     #[cfg(unix)]
     #[gpui::test]
     async fn test_foreground_process_command_tracks_path_command(cx: &mut TestAppContext) {
@@ -3949,8 +2758,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -4016,8 +2823,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -4081,8 +2886,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    Vec::new(),
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -4142,87 +2945,6 @@ mod tests {
     }
 
     #[gpui::test]
-    fn test_mouse_to_cell_test(mut rng: StdRng) {
-        const ITERATIONS: usize = 10;
-        const PRECISION: usize = 1000;
-
-        for _ in 0..ITERATIONS {
-            let viewport_cells = rng.random_range(15..20);
-            let cell_size =
-                rng.random_range(5 * PRECISION..20 * PRECISION) as f32 / PRECISION as f32;
-
-            let size = crate::TerminalBounds {
-                cell_width: Pixels::from(cell_size),
-                line_height: Pixels::from(cell_size),
-                bounds: bounds(
-                    GpuiPoint::default(),
-                    size(
-                        Pixels::from(cell_size * (viewport_cells as f32)),
-                        Pixels::from(cell_size * (viewport_cells as f32)),
-                    ),
-                ),
-            };
-
-            let cells = get_cells(size, &mut rng);
-            let content = convert_cells_to_content(size, &cells);
-
-            for row in 0..(viewport_cells - 1) {
-                let row = row as usize;
-                for col in 0..(viewport_cells - 1) {
-                    let col = col as usize;
-
-                    let row_offset = rng.random_range(0..PRECISION) as f32 / PRECISION as f32;
-                    let col_offset = rng.random_range(0..PRECISION) as f32 / PRECISION as f32;
-
-                    let mouse_pos = point(
-                        Pixels::from(col as f32 * cell_size + col_offset),
-                        Pixels::from(row as f32 * cell_size + row_offset),
-                    );
-
-                    let content_index =
-                        content_index_for_mouse(mouse_pos, &content.terminal_bounds);
-                    let mouse_cell = content.cells[content_index].character();
-                    let real_cell = cells[row][col];
-
-                    assert_eq!(mouse_cell, real_cell);
-                }
-            }
-        }
-    }
-
-    #[gpui::test]
-    fn test_mouse_to_cell_clamp(mut rng: StdRng) {
-        let size = crate::TerminalBounds {
-            cell_width: Pixels::from(10.),
-            line_height: Pixels::from(10.),
-            bounds: bounds(
-                GpuiPoint::default(),
-                size(Pixels::from(100.), Pixels::from(100.)),
-            ),
-        };
-
-        let cells = get_cells(size, &mut rng);
-        let content = convert_cells_to_content(size, &cells);
-
-        assert_eq!(
-            content.cells[content_index_for_mouse(
-                point(Pixels::from(-10.), Pixels::from(-10.)),
-                &content.terminal_bounds,
-            )]
-            .character(),
-            cells[0][0]
-        );
-        assert_eq!(
-            content.cells[content_index_for_mouse(
-                point(Pixels::from(1000.), Pixels::from(1000.)),
-                &content.terminal_bounds,
-            )]
-            .character(),
-            cells[9][9]
-        );
-    }
-
-    #[gpui::test]
     async fn test_set_size_coalesces_pixel_only_changes(cx: &mut TestAppContext) {
         let builder = cx.update(|cx| {
             TerminalBuilder::new_display_only(
@@ -4264,42 +2986,6 @@ mod tests {
             terminal.events.back(),
             Some(InternalEvent::Resize(_))
         ));
-    }
-
-    fn get_cells(size: TerminalBounds, rng: &mut StdRng) -> Vec<Vec<char>> {
-        let mut cells = Vec::new();
-
-        for _ in 0..size.num_lines() {
-            let mut row_vec = Vec::new();
-            for _ in 0..size.num_columns() {
-                let cell_char = rng.sample(distr::Alphanumeric) as char;
-                row_vec.push(cell_char)
-            }
-            cells.push(row_vec)
-        }
-
-        cells
-    }
-
-    fn convert_cells_to_content(terminal_bounds: TerminalBounds, cells: &[Vec<char>]) -> Content {
-        let mut ic = Vec::new();
-
-        for (index, row) in cells.iter().enumerate() {
-            for (cell_index, cell_char) in row.iter().enumerate() {
-                let mut cell = Cell::default();
-                cell.set_character(*cell_char);
-                ic.push(IndexedCell {
-                    point: Point::new(index as i32, cell_index),
-                    cell,
-                });
-            }
-        }
-
-        Content {
-            cells: ic,
-            terminal_bounds,
-            ..Default::default()
-        }
     }
 
     #[gpui::test]
@@ -4572,774 +3258,6 @@ mod tests {
         assert_eq!(clipboard_text.as_deref(), Some("original"));
     }
 
-    #[cfg(feature = "ui")]
-    mod hyperlinks {
-        use super::{
-            init_terminal_test, init_terminal_test_with_window, left_mouse_down_at,
-            left_mouse_up_at,
-        };
-        use crate::*;
-        use gpui::{
-            Context, Entity, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-            Pixels, Subscription, TestAppContext, VisualContext, VisualTestContext, point,
-        };
-        use std::ops::RangeInclusive;
-        use util::default;
-
-        fn ctrl_mouse_down_at(
-            terminal: &mut Terminal,
-            position: GpuiPoint<Pixels>,
-            cx: &mut Context<Terminal>,
-        ) {
-            let mouse_down = MouseDownEvent {
-                button: MouseButton::Left,
-                position,
-                modifiers: Modifiers::secondary_key(),
-                click_count: 1,
-                first_mouse: true,
-            };
-            terminal.mouse_down(&mouse_down, cx);
-        }
-
-        fn ctrl_mouse_drag_to(
-            terminal: &mut Terminal,
-            position: GpuiPoint<Pixels>,
-            cx: &mut Context<Terminal>,
-        ) {
-            let terminal_bounds = terminal.last_content.terminal_bounds.bounds;
-            let drag_event = MouseMoveEvent {
-                position,
-                pressed_button: Some(MouseButton::Left),
-                modifiers: Modifiers::secondary_key(),
-            };
-            terminal.mouse_drag(&drag_event, terminal_bounds, cx);
-        }
-
-        fn ctrl_mouse_up_at(
-            terminal: &mut Terminal,
-            position: GpuiPoint<Pixels>,
-            cx: &mut Context<Terminal>,
-        ) {
-            let mouse_up = MouseUpEvent {
-                button: MouseButton::Left,
-                position,
-                modifiers: Modifiers::secondary_key(),
-                click_count: 1,
-            };
-            terminal.mouse_up(&mouse_up, cx);
-        }
-
-        macro_rules! any_event_matches {
-            ($terminal:ident, $event:pat) => {
-                $terminal.events.iter().any(|event| matches!(event, $event))
-            };
-        }
-
-        #[gpui::test]
-        async fn test_ctrl_click_same_position(cx: &mut TestAppContext) {
-            let terminal = init_terminal_test(cx, b"Visit https://zed.dev/ for more\r\n");
-
-            terminal.update(cx, |terminal, cx| {
-                let click_position = point(px(80.0), px(10.0));
-                ctrl_mouse_down_at(terminal, click_position, cx);
-                ctrl_mouse_up_at(terminal, click_position, cx);
-
-                assert!(
-                    any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, true)),
-                    "Should have ProcessHyperlink event when ctrl+clicking on same hyperlink position"
-                );
-            });
-        }
-
-        #[gpui::test]
-        async fn test_hyperlink_ctrl_click_same_position_in_mouse_mode(cx: &mut TestAppContext) {
-            let terminal = init_terminal_test(cx, b"Visit https://zed.dev/ for more\r\n");
-
-            terminal.update(cx, |terminal, cx| {
-            terminal.last_content.mode = Modes::MOUSE_MODE;
-
-            let click_position = point(px(80.0), px(10.0));
-            ctrl_mouse_down_at(terminal, click_position, cx);
-            ctrl_mouse_up_at(terminal, click_position, cx);
-
-            assert!(
-                any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, true)),
-                "Should have ProcessHyperlink event when ctrl+clicking on same hyperlink position in mouse mode"
-            );
-            assert!(
-                terminal.take_pty_write_log().is_empty(),
-                "a consumed link click must not be reported to the PTY"
-            );
-        });
-        }
-
-        #[gpui::test]
-        async fn test_hyperlink_ctrl_click_mismatch_in_mouse_mode_consumes_gesture(
-            cx: &mut TestAppContext,
-        ) {
-            let terminal = init_terminal_test(
-                cx,
-                b"Visit https://zed.dev/ for more\r\nThis is another line\r\n",
-            );
-
-            terminal.update(cx, |terminal, cx| {
-            terminal.last_content.mode = Modes::MOUSE_MODE;
-            terminal.take_pty_write_log();
-
-            let down_position = point(px(80.0), px(10.0));
-            let up_position = point(px(10.0), px(30.0));
-
-            ctrl_mouse_down_at(terminal, down_position, cx);
-            terminal.mouse_move(
-                &MouseMoveEvent {
-                    position: up_position,
-                    pressed_button: Some(MouseButton::Left),
-                    modifiers: Modifiers::secondary_key(),
-                },
-                cx,
-            );
-            ctrl_mouse_up_at(terminal, up_position, cx);
-
-            assert!(
-                !any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, _)),
-                "Should NOT open a link when press and release land on different hyperlinks"
-            );
-            let pty_writes = terminal.take_pty_write_log();
-            assert!(
-                pty_writes.is_empty(),
-                "a captured press must consume the whole gesture, but reports leaked to the PTY: {pty_writes:?}"
-            );
-        });
-        }
-
-        #[gpui::test]
-        async fn test_plain_click_on_hyperlink_in_mouse_mode_is_reported(cx: &mut TestAppContext) {
-            let terminal = init_terminal_test(cx, b"Visit https://zed.dev/ for more\r\n");
-
-            terminal.update(cx, |terminal, cx| {
-                terminal.last_content.mode = Modes::MOUSE_MODE;
-                terminal.take_pty_write_log();
-
-                let click_position = point(px(80.0), px(10.0));
-                left_mouse_down_at(terminal, click_position, cx);
-                left_mouse_up_at(terminal, click_position, cx);
-
-                assert!(
-                    !any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, _)),
-                    "a plain click must not open a link"
-                );
-                let pty_writes = terminal.take_pty_write_log();
-                assert_eq!(
-                    pty_writes.len(),
-                    2,
-                    "expected press and release reports, got {pty_writes:?}"
-                );
-            });
-        }
-
-        #[gpui::test]
-        async fn test_ctrl_click_on_non_hyperlink_in_mouse_mode_is_reported(
-            cx: &mut TestAppContext,
-        ) {
-            let terminal = init_terminal_test(cx, b"Visit https://zed.dev/ for more\r\n");
-
-            terminal.update(cx, |terminal, cx| {
-                terminal.last_content.mode = Modes::MOUSE_MODE;
-                terminal.take_pty_write_log();
-
-                // Past the end of the line: nothing link-like under the cursor.
-                let click_position = point(px(370.0), px(10.0));
-                ctrl_mouse_down_at(terminal, click_position, cx);
-                ctrl_mouse_up_at(terminal, click_position, cx);
-
-                assert!(
-                    !any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, _)),
-                    "a secondary click off a link must not open anything"
-                );
-                let pty_writes = terminal.take_pty_write_log();
-                assert_eq!(
-                    pty_writes.len(),
-                    2,
-                    "expected press and release reports, got {pty_writes:?}"
-                );
-            });
-        }
-
-        #[gpui::test]
-        async fn test_ctrl_click_in_mouse_mode_forwards_when_setting_disabled(
-            cx: &mut TestAppContext,
-        ) {
-            let terminal = init_terminal_test(cx, b"Visit https://zed.dev/ for more\r\n");
-
-            cx.update_global(|store: &mut settings::SettingsStore, cx| {
-                store.update_user_settings(cx, |settings| {
-                    settings
-                        .terminal
-                        .get_or_insert_default()
-                        .open_links_in_mouse_mode = Some(false);
-                });
-            });
-
-            terminal.update(cx, |terminal, cx| {
-                terminal.last_content.mode = Modes::MOUSE_MODE;
-
-                let click_position = point(px(80.0), px(10.0));
-                ctrl_mouse_down_at(terminal, click_position, cx);
-                ctrl_mouse_up_at(terminal, click_position, cx);
-
-                assert!(
-                    !any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, _)),
-                    "with the setting disabled, ctrl+click must not open links in mouse mode"
-                );
-                let pty_writes = terminal.take_pty_write_log();
-                assert_eq!(
-                    pty_writes.len(),
-                    2,
-                    "expected press and release reports, got {pty_writes:?}"
-                );
-            });
-        }
-
-        #[gpui::test]
-        async fn test_hyperlink_ctrl_click_drag_outside_bounds(cx: &mut TestAppContext) {
-            let terminal = init_terminal_test(
-                cx,
-                b"Visit https://zed.dev/ for more\r\nThis is another line\r\n",
-            );
-
-            terminal.update(cx, |terminal, cx| {
-                let down_position = point(px(80.0), px(10.0));
-                let up_position = point(px(10.0), px(50.0));
-
-                ctrl_mouse_down_at(terminal, down_position, cx);
-                ctrl_mouse_drag_to(terminal, up_position, cx);
-                ctrl_mouse_up_at(terminal, up_position, cx);
-
-                assert!(
-                    !any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, _)),
-                    "Should NOT have ProcessHyperlink event when dragging outside the hyperlink"
-                );
-            });
-        }
-
-        #[gpui::test]
-        async fn test_ctrl_click_drag_within_bounds(cx: &mut TestAppContext) {
-            let terminal = init_terminal_test(cx, b"Visit https://zed.dev/ for more\r\n");
-
-            terminal.update(cx, |terminal, cx| {
-                let down_position = point(px(70.0), px(10.0));
-                let up_position = point(px(130.0), px(10.0));
-
-                ctrl_mouse_down_at(terminal, down_position, cx);
-                ctrl_mouse_drag_to(terminal, up_position, cx);
-                ctrl_mouse_up_at(terminal, up_position, cx);
-
-                assert!(
-                    any_event_matches!(terminal, InternalEvent::ProcessHyperlink(_, true)),
-                    "Should have ProcessHyperlink event when dragging within hyperlink bounds"
-                );
-            });
-        }
-
-        impl<T: AsRef<str>> From<(T, RangeInclusive<(i32, usize)>, usize)> for HoveredWord {
-            fn from(value: (T, RangeInclusive<(i32, usize)>, usize)) -> Self {
-                let match_start = Point::new(value.1.start().0, value.1.start().1);
-                let match_end = Point::new(value.1.end().0, value.1.end().1);
-                Self {
-                    word: value.0.as_ref().to_string(),
-                    word_match: Range::new(match_start, match_end),
-                    id: value.2,
-                }
-            }
-        }
-
-        trait WithLineAndId {
-            fn with_line(&self, line: i32) -> Self;
-            fn with_id(&self, id: usize) -> Self;
-            fn with_line_and_id(&self, line: i32, id: usize) -> Self;
-        }
-
-        impl WithLineAndId for HoveredWord {
-            fn with_line(&self, line: i32) -> Self {
-                Self::from((
-                    self.word.clone(),
-                    (line, self.word_match.start().column)..=(line, self.word_match.end().column),
-                    self.id,
-                ))
-            }
-
-            fn with_id(&self, id: usize) -> Self {
-                Self {
-                    word: self.word.clone(),
-                    word_match: self.word_match,
-                    id,
-                }
-            }
-
-            fn with_line_and_id(&self, line: i32, id: usize) -> Self {
-                Self::from((
-                    self.word.clone(),
-                    (line, self.word_match.start().column)..=(line, self.word_match.end().column),
-                    id,
-                ))
-            }
-        }
-
-        struct HyperlinkVisualTestContext<'a, 'b> {
-            terminal: &'a mut Terminal,
-            window: &'a mut Window,
-            cx: &'a mut Context<'b, Terminal>,
-        }
-
-        impl<'a, 'b> HyperlinkVisualTestContext<'a, 'b> {
-            fn new(
-                terminal: &'a mut Terminal,
-                window: &'a mut Window,
-                cx: &'a mut Context<'b, Terminal>,
-            ) -> Self {
-                Self {
-                    terminal,
-                    window,
-                    cx,
-                }
-            }
-
-            #[track_caller]
-            fn assert_visible_lines_match(
-                &self,
-                expected_lines: impl IntoIterator<Item = &'static str>,
-            ) {
-                fn visible_lines(terminal: &Terminal) -> Vec<String> {
-                    terminal.with_renderable_cells(|cells| {
-                        let mut text_lines = Vec::new();
-                        let linegroups = cells.into_iter().chunk_by(|cell| cell.point.line);
-                        for (_, (_, line)) in linegroups.into_iter().enumerate() {
-                            let mut previous_cell_had_extras = false;
-                            let mut text = String::new();
-                            for IndexedCell { cell, .. } in line {
-                                // Skip wide character spacers - they're just placeholders for the second cell of wide characters
-                                if cell.is_wide_char_spacer() {
-                                    continue;
-                                }
-
-                                // Skip spaces that follow cells with extras (emoji variation sequences)
-                                if cell.character() == ' ' && previous_cell_had_extras {
-                                    previous_cell_had_extras = false;
-                                    continue;
-                                }
-                                // Update tracking for next iteration
-                                previous_cell_had_extras =
-                                    matches!(cell.zerowidth(), Some(chars) if !chars.is_empty());
-
-                                text.push(cell.character());
-                            }
-
-                            text_lines.push(text.trim_end().to_string());
-                        }
-
-                        text_lines
-                    })
-                }
-
-                let lines = visible_lines(self.terminal);
-                let mut expected_lines = expected_lines.into_iter();
-                for (line, text) in lines.into_iter().enumerate() {
-                    let Some(expected_text) = expected_lines.next() else {
-                        // More actual lines than expected lines, ignore
-                        return;
-                    };
-                    assert_eq!(text, expected_text, "Mismatched text at line {line}");
-                }
-
-                assert!(expected_lines.next().is_none(), "Extra expected lines")
-            }
-
-            #[track_caller]
-            fn assert_display_offset(&self, expected_display_offset: usize) {
-                assert_eq!(
-                    self.terminal.last_content().display_offset,
-                    expected_display_offset,
-                    "Mismatched display offset"
-                );
-            }
-
-            #[track_caller]
-            fn assert_hovered_word(&self, expected_hovered_word: Option<&HoveredWord>) {
-                assert_eq!(
-                    self.terminal.last_content().last_hovered_word.as_ref(),
-                    expected_hovered_word,
-                    "Mismatched hovered word"
-                );
-            }
-
-            fn ctrl_mouse_move_to(&mut self, position: GpuiPoint<Pixels>) {
-                let modifiers = Modifiers::secondary_key();
-                let move_event = MouseMoveEvent {
-                    position,
-                    modifiers,
-                    ..default()
-                };
-                self.window.simulate_mouse_move(position, self.cx);
-                self.unthrottle();
-                self.terminal.mouse_move(&move_event, self.cx);
-            }
-
-            fn try_modifiers_change(&mut self, modifiers: Modifiers) {
-                self.window.set_modifiers(modifiers);
-                self.unthrottle();
-                self.terminal
-                    .try_modifiers_change(&modifiers, self.window, self.cx);
-            }
-
-            fn write_output_lines(&mut self, output: &str, repeat: usize) {
-                for _ in 0..repeat {
-                    self.terminal.write_output(output.as_bytes(), self.cx);
-                    self.terminal.write_output(b"\n", self.cx);
-                }
-            }
-
-            fn scroll_up_by_and_sync(&mut self, lines: usize) {
-                self.terminal.scroll_up_by(lines);
-                self.sync();
-            }
-
-            fn set_size_and_sync(&mut self, new_bounds: TerminalBounds) {
-                self.terminal.set_size(new_bounds);
-                self.sync();
-            }
-
-            fn sync(&mut self) {
-                self.unthrottle();
-                self.terminal.sync(self.window, self.cx);
-            }
-
-            fn unthrottle(&mut self) {
-                // Suppress hyperlink throttling for testing
-                self.terminal.suppress_hyperlink_throttle_once = true;
-            }
-
-            fn set_window_secondary_key(&mut self) {
-                self.window.set_modifiers(Modifiers::secondary_key());
-            }
-
-            fn clear_window_secondary_key(&mut self) {
-                self.window.set_modifiers(default());
-            }
-        }
-
-        struct TestView {
-            wakeups: usize,
-            notifies: usize,
-            _terminal_subscriptions: Vec<Subscription>,
-        }
-
-        impl TestView {
-            fn new(
-                terminal: &Entity<Terminal>,
-                window: &mut Window,
-                cx: &mut Context<Self>,
-            ) -> Self {
-                Self {
-                    wakeups: 0,
-                    notifies: 0,
-                    _terminal_subscriptions: Self::subscribe_for_terminal_events(
-                        terminal, window, cx,
-                    ),
-                }
-            }
-
-            fn subscribe_for_terminal_events(
-                terminal: &Entity<Terminal>,
-                window: &mut Window,
-                cx: &mut Context<TestView>,
-            ) -> Vec<Subscription> {
-                let terminal_subscription =
-                    cx.observe_in(terminal, window, |test_view, terminal, window, cx| {
-                        test_view.notifies += 1;
-                        cx.update_entity(&terminal, |terminal, cx| {
-                            terminal.suppress_hyperlink_throttle_once = true;
-                            terminal.sync(window, cx)
-                        })
-                    });
-                let terminal_events_subscription = cx.subscribe_in(
-                    terminal,
-                    window,
-                    |test_view, terminal, event, window, cx| match event {
-                        Event::Wakeup => {
-                            test_view.wakeups += 1;
-                            cx.update_entity(terminal, |terminal, cx| {
-                                terminal.suppress_hyperlink_throttle_once = true;
-                                terminal.sync(window, cx)
-                            })
-                        }
-                        _ => {}
-                    },
-                );
-                vec![terminal_subscription, terminal_events_subscription]
-            }
-        }
-
-        struct Wakeups(usize);
-        struct Notifies(usize);
-        struct Expected(Wakeups, Notifies);
-
-        #[track_caller]
-        fn assert_wakeups_and_notifies(
-            Expected(Wakeups(wakeups), Notifies(notifies)): Expected,
-            test_view: &Entity<TestView>,
-            cx: &mut VisualTestContext,
-        ) {
-            let (actual_wakeups, actual_notifies) = cx.update_entity(&test_view, |test_view, _| {
-                (
-                    std::mem::take(&mut test_view.wakeups),
-                    std::mem::take(&mut test_view.notifies),
-                )
-            });
-            assert_eq!(actual_wakeups, wakeups, "Mismatched wakeups");
-            assert_eq!(actual_notifies, notifies, "Mismatced notifies");
-        }
-
-        struct TestEntities {
-            terminal: Entity<Terminal>,
-            test_view: Entity<TestView>,
-        }
-
-        impl TestEntities {
-            fn new(terminal: &Entity<Terminal>, test_view: &Entity<TestView>) -> Self {
-                Self {
-                    terminal: terminal.clone(),
-                    test_view: test_view.clone(),
-                }
-            }
-        }
-
-        #[track_caller]
-        fn update_test_entities(
-            TestEntities {
-                terminal,
-                test_view,
-            }: &TestEntities,
-            cx: &mut VisualTestContext,
-            update: impl FnOnce(&mut HyperlinkVisualTestContext) -> Option<Expected>,
-        ) {
-            let expected = cx.update_window_entity(terminal, |terminal, window, cx| {
-                update(&mut HyperlinkVisualTestContext::new(terminal, window, cx))
-            });
-            cx.run_until_parked();
-            if let Some(expected) = expected {
-                assert_wakeups_and_notifies(expected, test_view, cx)
-            }
-        }
-
-        async fn init_ctrl_hover_hyperlink_test_with_window(
-            cx: &mut TestAppContext,
-        ) -> (TestEntities, HoveredWord, &mut VisualTestContext) {
-            let (terminal, cx) = init_terminal_test_with_window(cx, b"");
-            let test_view = cx.new_window_entity(|window, cx| TestView::new(&terminal, window, cx));
-            let test_entities = TestEntities::new(&terminal, &test_view);
-            let expected_hovered_word: HoveredWord = (ZED_DEV_STR, (0, 6)..=(0, 21), 0).into();
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                // Set initial expected hovered word
-                cx.write_output_lines(OUTPUT_ZED_DEV, 1);
-                Some(Expected(Wakeups(2), Notifies(0)))
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.assert_display_offset(0);
-                cx.assert_visible_lines_match(vec![OUTPUT_ZED_DEV]);
-                cx.set_window_secondary_key();
-                cx.ctrl_mouse_move_to(ZED_DEV_PT);
-                Some(Expected(Wakeups(0), Notifies(2)))
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.assert_hovered_word(Some(&expected_hovered_word));
-                None
-            });
-            (test_entities, expected_hovered_word, cx)
-        }
-
-        const OUTPUT_ZED_DEV: &str = "Visit https://zed.dev/ for more";
-        const OUTPUT_NONE: &str = "None";
-        const ZED_DEV_STR: &str = "https://zed.dev/";
-        const ZED_DEV_PT: GpuiPoint<Pixels> = point(px(30.0), px(2.5));
-
-        #[gpui::test]
-        async fn test_ctrl_hover_with_changing_content(cx: &mut TestAppContext) {
-            let (test_entities, mut expected_hovered_word, cx) =
-                init_ctrl_hover_hyperlink_test_with_window(cx).await;
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.write_output_lines(OUTPUT_ZED_DEV, 1);
-                Some(Expected(Wakeups(2), Notifies(0)))
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.assert_display_offset(0);
-                cx.assert_visible_lines_match(vec![OUTPUT_ZED_DEV, OUTPUT_ZED_DEV]);
-                // Existing hovered_word IS reused when viewport is static
-                cx.assert_hovered_word(Some(&expected_hovered_word));
-                cx.write_output_lines(OUTPUT_ZED_DEV, 8);
-                // Explicitly sync here, because the next sync will emit a wake up, which will
-                // trigger another sync, and we need to check in-between them.
-                cx.sync();
-                cx.assert_display_offset(0);
-                cx.assert_visible_lines_match(vec![
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_ZED_DEV,
-                ]);
-                // Existing hovered_word IS NOT reused when viewport is changing (total lines changed,
-                // but display offset did not have a corresponding change)
-                cx.assert_hovered_word(None);
-                // NOTE: 16 of these wakeups are from write_output() (2x8). The 17th is the important
-                // one we are testing that comes from sync() and results in the hovered word being
-                // set again, which we asserted below.
-                Some(Expected(Wakeups(17), Notifies(1)))
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.clear_window_secondary_key();
-                // ...AND new hovered_word is set if secondary was held.
-                expected_hovered_word = expected_hovered_word.with_id(expected_hovered_word.id + 1);
-                cx.assert_hovered_word(Some(&expected_hovered_word));
-                cx.set_window_secondary_key();
-                for _ in 0..5 {
-                    cx.write_output_lines(OUTPUT_ZED_DEV, 1);
-                    cx.write_output_lines(OUTPUT_NONE, 1);
-                }
-                Some(Expected(Wakeups(21), Notifies(1)))
-            });
-            for _ in 0..5 {
-                update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                    // Should not have a hovered word from previous iteration
-                    cx.assert_hovered_word(None);
-                    cx.write_output_lines(OUTPUT_ZED_DEV, 1);
-                    // Explicitly sync here, because the next sync will emit a wake up, which will
-                    // trigger another sync, and we need to check in-between them.
-                    cx.sync();
-                    cx.assert_hovered_word(None);
-                    None
-                });
-                update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                    expected_hovered_word =
-                        expected_hovered_word.with_id(expected_hovered_word.id + 1);
-                    cx.assert_hovered_word(Some(&expected_hovered_word));
-                    cx.write_output_lines(OUTPUT_NONE, 1);
-                    // Explicitly sync here, because the next sync will emit a wake up, which will
-                    // trigger another sync, and we need to check in-between them.
-                    cx.sync();
-                    cx.assert_hovered_word(None);
-                    None
-                });
-            }
-            assert_wakeups_and_notifies(
-                Expected(Wakeups(30), Notifies(10)),
-                &test_entities.test_view,
-                cx,
-            );
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.scroll_up_by_and_sync(3);
-                // Existing hovered word IS NOT reused when scrolling
-                cx.assert_hovered_word(None);
-                cx.ctrl_mouse_move_to(ZED_DEV_PT);
-                Some(Expected(Wakeups(0), Notifies(2)))
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.assert_display_offset(3);
-                cx.assert_visible_lines_match(vec![
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_NONE,
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_NONE,
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_NONE,
-                ]);
-                None
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                expected_hovered_word =
-                    expected_hovered_word.with_line_and_id(-3, expected_hovered_word.id + 2);
-                cx.assert_hovered_word(Some(&expected_hovered_word));
-                // Use an odd number of lines so the previous grid coordinate contains
-                // OUTPUT_NONE after the scrollback coordinates shift.
-                cx.write_output_lines(OUTPUT_ZED_DEV, 1);
-                // All wakeups here are from write_output()
-                Some(Expected(Wakeups(2), Notifies(0)))
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.assert_display_offset(4);
-                cx.assert_visible_lines_match(vec![
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_NONE,
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_NONE,
-                    OUTPUT_ZED_DEV,
-                    OUTPUT_NONE,
-                ]);
-                // Existing hovered word IS reused (and adjusted) when total lines changed, but
-                // visible lines unchanged
-                expected_hovered_word = expected_hovered_word.with_line(-4);
-                cx.assert_hovered_word(Some(&expected_hovered_word));
-                None
-            });
-        }
-
-        #[gpui::test]
-        async fn test_ctrl_hover_with_changing_bounds(cx: &mut TestAppContext) {
-            let (test_entities, mut expected_hovered_word, cx) =
-                init_ctrl_hover_hyperlink_test_with_window(cx).await;
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.set_size_and_sync(TerminalBounds::new(
-                    px(5.0),
-                    px(5.0),
-                    Bounds {
-                        origin: GpuiPoint::default(),
-                        size: Size {
-                            width: px(161.8),
-                            height: px(61.8),
-                        },
-                    },
-                ));
-                cx.assert_display_offset(0);
-                cx.assert_visible_lines_match(vec![OUTPUT_ZED_DEV]);
-                // Existing hovered word IS NOT reused when bounds change
-                cx.assert_hovered_word(None);
-                Some(Expected(Wakeups(1), Notifies(2)))
-            });
-            update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                cx.clear_window_secondary_key();
-                // ...AND new hovered_word is set if secondary was held.
-                expected_hovered_word = expected_hovered_word.with_id(expected_hovered_word.id + 1);
-                cx.assert_hovered_word(Some(&expected_hovered_word));
-                Some(Expected(Wakeups(0), Notifies(0)))
-            });
-        }
-
-        #[gpui::test]
-        async fn test_ctrl_hover_with_modifier_change_only(cx: &mut TestAppContext) {
-            let (test_entities, mut expected_hovered_word, cx) =
-                init_ctrl_hover_hyperlink_test_with_window(cx).await;
-            for _ in 0..10 {
-                update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                    cx.try_modifiers_change(default());
-                    Some(Expected(Wakeups(0), Notifies(0)))
-                });
-                update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                    // Existing hovered_word cleared when secondary not held
-                    cx.assert_hovered_word(None);
-
-                    cx.try_modifiers_change(Modifiers::secondary_key());
-                    Some(Expected(Wakeups(0), Notifies(2)))
-                });
-                update_test_entities(&test_entities, cx, |cx: &mut HyperlinkVisualTestContext| {
-                    expected_hovered_word =
-                        expected_hovered_word.with_id(expected_hovered_word.id + 1);
-                    // hovered_word set when secondary is held
-                    cx.assert_hovered_word(Some(&expected_hovered_word));
-                    None
-                });
-            }
-        }
-    }
-
     /// Polls the terminal content until `expected` appears, or panics after ~1s.
     /// The PTY IO thread writes into the terminal grid independently of the
     /// GPUI executor, so we need a real-time polling loop to synchronize.
@@ -5460,114 +3378,6 @@ mod tests {
             content.contains("done"),
             "Output should still be present after no-op kill, got: {content}"
         );
-    }
-
-    #[cfg(feature = "ui")]
-    mod perf {
-        use super::{super::*, init_terminal_test_with_window};
-        use gpui::{ScrollDelta, ScrollWheelEvent, TestAppContext, VisualContext, point};
-        use util::default;
-        use util_macros::perf;
-
-        #[perf]
-        #[gpui::test]
-        async fn scroll_long_line_benchmark(cx: &mut TestAppContext) {
-            let (terminal, cx) =
-                init_terminal_test_with_window(cx, "long line ".repeat(1000).as_bytes());
-            let wobble = point(FIND_HYPERLINK_THROTTLE_PX, px(0.0));
-            let mut scroll_by = |lines: i32| {
-                cx.update_window_entity(&terminal, |terminal, window, cx| {
-                    let bounds = terminal.last_content.terminal_bounds.bounds;
-                    let center = bounds.origin + bounds.center();
-                    let position = center + wobble * lines as f32;
-
-                    terminal.mouse_move(
-                        &MouseMoveEvent {
-                            position,
-                            ..default()
-                        },
-                        cx,
-                    );
-
-                    terminal.scroll_wheel(
-                        &ScrollWheelEvent {
-                            position,
-                            delta: ScrollDelta::Lines(GpuiPoint::new(0.0, lines as f32)),
-                            ..default()
-                        },
-                        1.0,
-                    );
-
-                    assert!(
-                        terminal
-                            .events
-                            .iter()
-                            .any(|event| matches!(event, InternalEvent::Scroll(_))),
-                        "Should have Scroll event when scrolling within terminal bounds"
-                    );
-                    terminal.sync(window, cx);
-                });
-            };
-
-            for _ in 0..20000 {
-                scroll_by(1);
-                scroll_by(-1);
-            }
-        }
-
-        #[test]
-        fn test_num_lines_float_precision() {
-            let line_heights = [
-                20.1f32, 16.7, 18.3, 22.9, 14.1, 15.6, 17.8, 19.4, 21.3, 23.7,
-            ];
-            for &line_height in &line_heights {
-                for n in 1..=100 {
-                    let height = n as f32 * line_height;
-                    let bounds = TerminalBounds::new(
-                        px(line_height),
-                        px(8.0),
-                        Bounds {
-                            origin: GpuiPoint::default(),
-                            size: Size {
-                                width: px(800.0),
-                                height: px(height),
-                            },
-                        },
-                    );
-                    assert_eq!(
-                        bounds.num_lines(),
-                        n,
-                        "num_lines() should be {n} for height={height}, line_height={line_height}"
-                    );
-                }
-            }
-        }
-
-        #[test]
-        fn test_num_columns_float_precision() {
-            let cell_widths = [8.1f32, 7.3, 9.7, 6.9, 10.1];
-            for &cell_width in &cell_widths {
-                for n in 1..=200 {
-                    let width = n as f32 * cell_width;
-                    let bounds = TerminalBounds::new(
-                        px(20.0),
-                        px(cell_width),
-                        Bounds {
-                            origin: GpuiPoint::default(),
-                            size: Size {
-                                width: px(width),
-                                height: px(400.0),
-                            },
-                        },
-                    );
-                    assert_eq!(
-                        bounds.num_columns(),
-                        n,
-                        "num_columns() should be {n} for width={width}, cell_width={cell_width}"
-                    );
-                }
-            }
-        }
     }
 
     fn make_display_only_terminal() -> Terminal {

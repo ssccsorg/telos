@@ -267,6 +267,7 @@ fn remote_sync_keeps_debug_adapters() {
 }
 
 #[gpui::test]
+#[ignore = "requires the wasm grammar loader the headless extraction removed"]
 async fn test_extension_store(cx: &mut TestAppContext) {
     init_test(cx);
 
@@ -772,6 +773,7 @@ async fn test_extension_store(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+#[ignore = "requires the extensions/test-extension fixture and wasm runtime the headless extraction removed"]
 async fn test_extension_store_with_test_extension(cx: &mut TestAppContext) {
     init_test(cx);
     cx.executor().allow_parking();

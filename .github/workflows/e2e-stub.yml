@@ -28,14 +28,15 @@ jobs:
         run: |
           docker buildx build --load \
             --target tel \
-            --cache-from type=gha,scope=shared-telos \
-            --cache-to type=gha,mode=min,scope=shared-telos \
+            --cache-from type=gha,scope=telos-tel \
+            --cache-to type=gha,mode=min,ignore-error=true,scope=telos-tel \
             -t telos:tel \
             telos
 
       - name: Deterministic conformance (stub backend, no LLM)
         run: |
           docker run --rm \
+            -e CI \
             -e TELOS_BIN=/workspace/target/telos-release/tel \
             -v "$GITHUB_WORKSPACE/actus:/home/actus" \
             -w /home/actus \

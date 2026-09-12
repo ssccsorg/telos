@@ -5324,8 +5324,6 @@ mod tests {
                     ::terminal::terminal_settings::CursorShape::default(),
                     ::terminal::terminal_settings::AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,

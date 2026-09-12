@@ -1,4 +1,4 @@
-contact files: 20
+contact files: 19
 language/src/buffer.rs
 	HighlightStyle <- style.rs
 language/src/buffer_tests.rs
@@ -30,10 +30,6 @@ syntax_theme/src/syntax_theme.rs
 	FontStyle <- text_system.rs
 	FontWeight <- text_system.rs
 	HighlightStyle <- style.rs
-terminal/src/mappings/mouse.rs
-	MouseButton <- interactive.rs
-	ScrollDelta <- interactive.rs
-	ScrollWheelEvent <- interactive.rs
 terminal/src/terminal_settings.rs
 	FontFallbacks <- text_system/font_fallbacks.rs
 	FontFeatures <- text_system/font_features.rs
