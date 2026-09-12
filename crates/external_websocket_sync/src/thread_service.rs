@@ -301,47 +301,6 @@ fn init_streaming_throttle() {
     }
 }
 
-/// Flush pending throttled content for all entries in a thread OTHER than the
-/// specified entry index. Called from the NewEntry handler to ensure the
-/// preceding text entry's content is sent before a new entry (e.g. tool_call).
-fn flush_stale_pending_for_thread(acp_thread_id: &str, exclude_entry_idx: usize) {
-    init_streaming_throttle();
-    let thread_prefix = format!("{}:", acp_thread_id);
-    let exclude_key = format!("{}:{}", acp_thread_id, exclude_entry_idx);
-    let now = Instant::now();
-
-    let mut stale_pending: Vec<PendingMessage> = Vec::new();
-    {
-        let throttle_map = STREAMING_THROTTLE.lock();
-        let Some(map) = throttle_map.as_ref() else { return };
-        let mut map = map.write();
-
-        for (k, state) in map.iter_mut() {
-            if k.starts_with(&thread_prefix) && *k != exclude_key {
-                if let Some(pending) = state.pending_content.take() {
-                    state.last_sent = now;
-                    state.flush_scheduled = false;
-                    stale_pending.push(pending);
-                }
-            }
-        }
-    }
-
-    for pending in stale_pending {
-        let _ = crate::send_websocket_event(SyncEvent::MessageAdded {
-            acp_thread_id: pending.acp_thread_id,
-            message_id: pending.message_id,
-            role: pending.role,
-            content: pending.content,
-            request_id: pending.request_id,
-            entry_type: pending.entry_type,
-            tool_name: pending.tool_name,
-            tool_status: pending.tool_status,
-            timestamp: chrono::Utc::now().timestamp(),
-        });
-    }
-}
-
 /// Throttled send of message_added events. Only sends if enough time has passed
 /// since the last send for this entry. Otherwise, stores the content as pending.
 /// Returns true if the event was sent, false if throttled.

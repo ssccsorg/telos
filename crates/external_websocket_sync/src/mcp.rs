@@ -25,7 +25,6 @@ pub struct McpManager {
 /// Individual MCP server instance
 struct McpServerInstance {
     name: String,
-    config: McpServerConfig,
     process: Option<Child>,
     stdin_tx: Option<mpsc::UnboundedSender<McpRequest>>,
     tools: Vec<McpTool>,
@@ -129,7 +128,6 @@ impl McpManager {
                     log::error!("Failed to start MCP server {}: {}", server_name, e);
                     let failed_server = McpServerInstance {
                         name: server_name.clone(),
-                        config,
                         process: None,
                         stdin_tx: None,
                         tools: Vec::new(),
@@ -210,7 +208,6 @@ impl McpManager {
 
         Ok(McpServerInstance {
             name: config.name.clone(),
-            config,
             process: Some(child),
             stdin_tx: Some(stdin_tx),
             tools: Vec::new(),

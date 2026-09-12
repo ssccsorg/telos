@@ -31,7 +31,7 @@ use util::{ResultExt as _, paths::PathStyle, truncate_and_trailoff};
 use std::os::unix::process::ExitStatusExt;
 use std::{
     borrow::Cow,
-    cmp::{self, min},
+    cmp,
     fmt::{self, Display, Formatter},
     ops::{BitOr, BitOrAssign, Deref, Range as StdRange},
     path::{Path, PathBuf},
@@ -40,7 +40,7 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 use thiserror::Error;
 use vte::ansi::{Attr, Handler, Processor, StdSyncHandler};
@@ -55,11 +55,10 @@ use gpui::{
 use crate::alacritty::current_child_signal_mask;
 use crate::alacritty::{
     AlacrittyCell, AlacrittyGridIterator, AlacrittyHyperlink, AlacrittySearch, AlacrittyTermConfig,
-    AlacrittyTermLock, HyperlinkMatch, PtySender, RegexSearches, append_text_to_term, apply_config,
-    clear_saved_screen, content_text, display_only_term_config, full_content_range,
-    last_non_empty_lines, make_content, new_term, open_pty, pty_options, pty_term_config,
-    screen_lines, search_matches, set_default_cursor_style, shrink_to_used, spawn_event_loop,
-    total_lines, used_lines,
+    AlacrittyTermLock, PtySender, append_text_to_term, apply_config, clear_saved_screen,
+    content_text, display_only_term_config, last_non_empty_lines, make_content, new_term, open_pty,
+    pty_options, pty_term_config, screen_lines, search_matches, set_default_cursor_style,
+    shrink_to_used, spawn_event_loop, total_lines, used_lines,
 };
 use crate::mappings::colors::to_vte_rgb;
 use crate::mappings::keys::to_esc_str;
@@ -81,88 +80,9 @@ impl HeadlessTerminal {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum Scroll {
-    Delta(i32),
-    PageUp,
-    PageDown,
-    Top,
-    Bottom,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum ViMotion {
-    Up,
-    Down,
-    Left,
-    Right,
-    First,
-    Last,
-    FirstOccupied,
-    High,
-    Middle,
-    Low,
-    WordLeft,
-    WordRight,
-    WordRightEnd,
-    Bracket,
-    ParagraphUp,
-    ParagraphDown,
-}
-
 #[derive(Clone, Debug)]
 pub struct Search {
     search: AlacrittySearch,
-}
-
-#[derive(Clone, Debug)]
-struct Selection {
-    ty: SelectionType,
-    start: SelectionAnchor,
-    end: SelectionAnchor,
-    head: Point,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct SelectionAnchor {
-    point: Point,
-    side: SelectionSide,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SelectionSide {
-    Left,
-    Right,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SelectionType {
-    Simple,
-    Semantic,
-    Lines,
-}
-
-impl Selection {
-    fn new(selection_type: SelectionType, point: Point, side: SelectionSide) -> Self {
-        let anchor = SelectionAnchor { point, side };
-        Self {
-            ty: selection_type,
-            start: anchor,
-            end: anchor,
-            head: point,
-        }
-    }
-
-    fn simple_range(range: Range) -> Self {
-        let mut selection = Self::new(SelectionType::Simple, range.start(), SelectionSide::Left);
-        selection.update(range.end(), SelectionSide::Right);
-        selection
-    }
-
-    fn update(&mut self, point: Point, side: SelectionSide) {
-        self.end = SelectionAnchor { point, side };
-        self.head = point;
-    }
 }
 
 pub fn is_default_background_color(color: Color) -> bool {
@@ -535,12 +455,6 @@ impl Default for Content {
     }
 }
 
-#[derive(PartialEq, Eq)]
-enum SelectionPhase {
-    Selecting,
-    Ended,
-}
-
 #[cfg(test)]
 mod domain_tests {
     use super::*;
@@ -688,20 +602,6 @@ pub enum MaybeNavigationTarget {
 #[derive(Clone)]
 enum InternalEvent {
     Resize(TerminalBounds),
-    Clear,
-    // FocusNextMatch,
-    Scroll(Scroll),
-    ScrollToPoint(Point),
-    SetSelection(Option<Selection>),
-    UpdateSelection(GpuiPoint<Pixels>),
-    FindHyperlink(GpuiPoint<Pixels>, bool),
-    ProcessHyperlink(HyperlinkMatch, bool),
-    // Whether keep selection when copy
-    Copy(Option<bool>),
-    // Vi mode events
-    ToggleViMode,
-    ViMotion(ViMotion),
-    MoveViCursorToPoint(Point),
 }
 
 type ClipboardFormatter = Arc<dyn Fn(&str) -> String + Sync + Send + 'static>;
@@ -1014,21 +914,11 @@ impl TerminalBuilder {
                 terminal_bounds,
                 ..Default::default()
             },
-            last_mouse: None,
-            mouse_down_position: None,
             matches: Vec::new(),
 
             selection_head: None,
             breadcrumb_text: String::new(),
-            scroll_px: px(0.),
-            next_link_id: 0,
-            selection_phase: SelectionPhase::Ended,
-            hyperlink_regex_searches: RegexSearches::default(),
-            vi_mode_enabled: false,
             is_remote_terminal: false,
-            last_mouse_move_time: Instant::now(),
-            last_hyperlink_search_position: None,
-            mouse_down_hyperlink: None,
             #[cfg(windows)]
             shell_program: None,
             activation_script: Vec::new(),
@@ -1038,8 +928,6 @@ impl TerminalBuilder {
                 cursor_shape,
                 alternate_scroll,
                 max_scroll_history_lines,
-                path_hyperlink_regexes: Vec::default(),
-                path_hyperlink_timeout: Duration::ZERO,
                 window_id,
             },
             child_exited: None,
@@ -1053,8 +941,6 @@ impl TerminalBuilder {
             pending_cwd_boundary: None,
             #[cfg(any(test, feature = "test-support"))]
             input_log: Vec::new(),
-            #[cfg(test)]
-            suppress_hyperlink_throttle_once: false,
             #[cfg(any(test, feature = "test-support"))]
             pty_write_log: Default::default(),
         };
@@ -1073,8 +959,6 @@ impl TerminalBuilder {
         cursor_shape: SettingsCursorShape,
         alternate_scroll: AlternateScroll,
         max_scroll_history_lines: Option<usize>,
-        path_hyperlink_regexes: Vec<String>,
-        path_hyperlink_timeout: Duration,
         is_remote_terminal: bool,
         window_id: u64,
         cx: &App,
@@ -1298,24 +1182,11 @@ impl TerminalBuilder {
                 title_override: terminal_title_override,
                 events: VecDeque::with_capacity(10), //Should never get this high.
                 last_content: Default::default(),
-                last_mouse: None,
-                mouse_down_position: None,
                 matches: Vec::new(),
 
                 selection_head: None,
                 breadcrumb_text: String::new(),
-                scroll_px: px(0.),
-                next_link_id: 0,
-                selection_phase: SelectionPhase::Ended,
-                hyperlink_regex_searches: RegexSearches::new(
-                    &path_hyperlink_regexes,
-                    path_hyperlink_timeout,
-                ),
-                vi_mode_enabled: false,
                 is_remote_terminal,
-                last_mouse_move_time: Instant::now(),
-                last_hyperlink_search_position: None,
-                mouse_down_hyperlink: None,
                 #[cfg(windows)]
                 shell_program,
                 activation_script: activation_script.clone(),
@@ -1325,8 +1196,6 @@ impl TerminalBuilder {
                     cursor_shape,
                     alternate_scroll,
                     max_scroll_history_lines,
-                    path_hyperlink_regexes,
-                    path_hyperlink_timeout,
                     window_id,
                 },
                 child_exited: None,
@@ -1352,8 +1221,6 @@ impl TerminalBuilder {
                 pending_cwd_boundary: None,
                 #[cfg(any(test, feature = "test-support"))]
                 input_log: Vec::new(),
-                #[cfg(test)]
-                suppress_hyperlink_throttle_once: false,
                 #[cfg(any(test, feature = "test-support"))]
                 pty_write_log: Default::default(),
             };
@@ -1496,27 +1363,14 @@ pub struct Terminal {
     term_config: AlacrittyTermConfig,
     output_processor: Processor<StdSyncHandler>,
     events: VecDeque<InternalEvent>,
-    /// This is only used for mouse mode cell change detection
-    last_mouse: Option<(Point, SelectionSide)>,
-    /// Window-relative position of the most recent left mouse-down. Used to
-    /// apply a drag threshold before starting a selection (see #58970).
-    mouse_down_position: Option<GpuiPoint<Pixels>>,
     pub matches: Vec<Range>,
     pub last_content: Content,
     pub selection_head: Option<Point>,
 
     pub breadcrumb_text: String,
     title_override: Option<String>,
-    scroll_px: Pixels,
-    next_link_id: usize,
-    selection_phase: SelectionPhase,
-    hyperlink_regex_searches: RegexSearches,
     task: Option<TaskState>,
-    vi_mode_enabled: bool,
     is_remote_terminal: bool,
-    last_mouse_move_time: Instant,
-    last_hyperlink_search_position: Option<GpuiPoint<Pixels>>,
-    mouse_down_hyperlink: Option<HyperlinkMatch>,
     #[cfg(windows)]
     shell_program: Option<String>,
     template: CopyTemplate,
@@ -1532,8 +1386,6 @@ pub struct Terminal {
     pending_cwd_boundary: Option<i32>,
     #[cfg(any(test, feature = "test-support"))]
     input_log: Vec<Vec<u8>>,
-    #[cfg(test)]
-    suppress_hyperlink_throttle_once: bool,
     #[cfg(any(test, feature = "test-support"))]
     pty_write_log: std::cell::RefCell<Vec<Vec<u8>>>,
 }
@@ -1551,8 +1403,6 @@ struct CopyTemplate {
     cursor_shape: SettingsCursorShape,
     alternate_scroll: AlternateScroll,
     max_scroll_history_lines: Option<usize>,
-    path_hyperlink_regexes: Vec<String>,
-    path_hyperlink_timeout: Duration,
     window_id: u64,
 }
 
@@ -1678,10 +1528,6 @@ impl Terminal {
         }
     }
 
-    pub fn selection_started(&self) -> bool {
-        self.selection_phase == SelectionPhase::Selecting
-    }
-
     pub fn last_content(&self) -> &Content {
         &self.last_content
     }
@@ -1716,94 +1562,8 @@ impl Terminal {
         used_lines(&self.term.lock_unfair())
     }
 
-    //To test:
-    //- Activate match on terminal (scrolling and selection)
-    //- Editor search snapping behavior
-
-    pub fn activate_match(&mut self, index: usize) {
-        if let Some(search_match) = self.matches.get(index).cloned() {
-            self.set_selection(Some(Selection::simple_range(search_match)));
-            if self.vi_mode_enabled {
-                self.events
-                    .push_back(InternalEvent::MoveViCursorToPoint(search_match.end()));
-            } else {
-                self.events
-                    .push_back(InternalEvent::ScrollToPoint(search_match.start()));
-            }
-        }
-    }
-
-    pub fn select_matches(&mut self, matches: &[Range]) {
-        let matches_to_select = self
-            .matches
-            .iter()
-            .filter(|self_match| matches.contains(self_match))
-            .cloned()
-            .collect::<Vec<_>>();
-        for match_to_select in matches_to_select {
-            self.set_selection(Some(Selection::simple_range(match_to_select)));
-        }
-    }
-
-    pub fn select_all(&mut self) {
-        let term = self.term.lock();
-        let range = full_content_range(&term);
-        drop(term);
-        self.set_selection(Some(Selection::simple_range(range)));
-    }
-
-    fn set_selection(&mut self, selection: Option<Selection>) {
-        self.events
-            .push_back(InternalEvent::SetSelection(selection));
-    }
-
-    pub fn copy(&mut self, keep_selection: Option<bool>) {
-        self.events.push_back(InternalEvent::Copy(keep_selection));
-    }
-
-    pub fn clear(&mut self) {
-        self.events.push_back(InternalEvent::Clear)
-    }
-
     pub fn shrink_to_used(&mut self) {
         shrink_to_used(&mut self.term.lock());
-    }
-
-    pub fn scroll_line_up(&mut self) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(1)));
-    }
-
-    pub fn scroll_up_by(&mut self, lines: usize) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(lines as i32)));
-    }
-
-    pub fn scroll_line_down(&mut self) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(-1)));
-    }
-
-    pub fn scroll_down_by(&mut self, lines: usize) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::Delta(-(lines as i32))));
-    }
-
-    pub fn scroll_page_up(&mut self) {
-        self.events.push_back(InternalEvent::Scroll(Scroll::PageUp));
-    }
-
-    pub fn scroll_page_down(&mut self) {
-        self.events
-            .push_back(InternalEvent::Scroll(Scroll::PageDown));
-    }
-
-    pub fn scroll_to_top(&mut self) {
-        self.events.push_back(InternalEvent::Scroll(Scroll::Top));
-    }
-
-    pub fn scroll_to_bottom(&mut self) {
-        self.events.push_back(InternalEvent::Scroll(Scroll::Bottom));
     }
 
     pub fn scrolled_to_top(&self) -> bool {
@@ -1976,8 +1736,6 @@ impl Terminal {
             ));
         }
 
-        self.events.push_back(InternalEvent::Scroll(Scroll::Bottom));
-        self.events.push_back(InternalEvent::SetSelection(None));
         #[cfg(any(test, feature = "test-support"))]
         self.input_log.push(input.to_vec());
 
@@ -1999,115 +1757,7 @@ impl Terminal {
         self.keyboard_input_sent
     }
 
-    pub fn toggle_vi_mode(&mut self) {
-        self.events.push_back(InternalEvent::ToggleViMode);
-    }
-
-    pub fn vi_motion(&mut self, keystroke: &Keystroke) {
-        if !self.vi_mode_enabled {
-            return;
-        }
-
-        let key: Cow<'_, str> = if keystroke.modifiers.shift {
-            Cow::Owned(keystroke.key.to_uppercase())
-        } else {
-            Cow::Borrowed(keystroke.key.as_str())
-        };
-
-        let motion: Option<ViMotion> = match key.as_ref() {
-            "h" | "left" => Some(ViMotion::Left),
-            "j" | "down" => Some(ViMotion::Down),
-            "k" | "up" => Some(ViMotion::Up),
-            "l" | "right" => Some(ViMotion::Right),
-            "w" => Some(ViMotion::WordRight),
-            "b" if !keystroke.modifiers.control => Some(ViMotion::WordLeft),
-            "e" => Some(ViMotion::WordRightEnd),
-            "%" => Some(ViMotion::Bracket),
-            "$" => Some(ViMotion::Last),
-            "0" => Some(ViMotion::First),
-            "^" => Some(ViMotion::FirstOccupied),
-            "H" => Some(ViMotion::High),
-            "M" => Some(ViMotion::Middle),
-            "L" => Some(ViMotion::Low),
-            "{" => Some(ViMotion::ParagraphUp),
-            "}" => Some(ViMotion::ParagraphDown),
-            _ => None,
-        };
-
-        if let Some(motion) = motion {
-            let cursor = self.last_content.cursor.point;
-            let cursor_pos = GpuiPoint {
-                x: cursor.column as f32 * self.last_content.terminal_bounds.cell_width,
-                y: cursor.line as f32 * self.last_content.terminal_bounds.line_height,
-            };
-            self.events
-                .push_back(InternalEvent::UpdateSelection(cursor_pos));
-            self.events.push_back(InternalEvent::ViMotion(motion));
-            return;
-        }
-
-        let scroll_motion = match key.as_ref() {
-            "g" => Some(Scroll::Top),
-            "G" => Some(Scroll::Bottom),
-            "b" if keystroke.modifiers.control => Some(Scroll::PageUp),
-            "f" if keystroke.modifiers.control => Some(Scroll::PageDown),
-            "d" if keystroke.modifiers.control => {
-                let amount = self.last_content.terminal_bounds.line_height().to_f64() as i32 / 2;
-                Some(Scroll::Delta(-amount))
-            }
-            "u" if keystroke.modifiers.control => {
-                let amount = self.last_content.terminal_bounds.line_height().to_f64() as i32 / 2;
-                Some(Scroll::Delta(amount))
-            }
-            _ => None,
-        };
-
-        if let Some(scroll_motion) = scroll_motion {
-            self.events.push_back(InternalEvent::Scroll(scroll_motion));
-            return;
-        }
-
-        match key.as_ref() {
-            "v" => {
-                let point = self.last_content.cursor.point;
-                let selection_type = SelectionType::Simple;
-                let side = SelectionSide::Right;
-                let selection = Selection::new(selection_type, point, side);
-                self.events
-                    .push_back(InternalEvent::SetSelection(Some(selection)));
-            }
-
-            "V" => {
-                let point = self.last_content.cursor.point;
-                let selection_type = SelectionType::Lines;
-                let side = SelectionSide::Right;
-                let selection = Selection::new(selection_type, point, side);
-                self.events
-                    .push_back(InternalEvent::SetSelection(Some(selection)));
-            }
-
-            "escape" => {
-                self.events.push_back(InternalEvent::SetSelection(None));
-            }
-
-            "y" => {
-                self.copy(Some(false));
-            }
-
-            "i" => {
-                self.scroll_to_bottom();
-                self.toggle_vi_mode();
-            }
-            _ => {}
-        }
-    }
-
     pub fn try_keystroke(&mut self, keystroke: &Keystroke, option_as_meta: bool) -> bool {
-        if self.vi_mode_enabled {
-            self.vi_motion(keystroke);
-            return true;
-        }
-
         // Keep default terminal behavior
         let esc = to_esc_str(keystroke, self.last_content.mode, option_as_meta);
         if let Some(esc) = esc {
@@ -2242,6 +1892,7 @@ impl Terminal {
             .unwrap_or_default();
     }
 
+    #[cfg(test)]
     fn cwd_at_line(&self, line: i32, history_size: usize) -> Option<PathBuf> {
         // Once the scrollback cap is reached, evictions move retained lines without changing
         // `history_size`, so stored row offsets no longer identify their original lines.
@@ -2479,10 +2130,6 @@ impl Terminal {
         }
     }
 
-    pub fn vi_mode_enabled(&self) -> bool {
-        self.vi_mode_enabled
-    }
-
     pub fn clone_builder(&self, cx: &App, cwd: Option<PathBuf>) -> Task<Result<TerminalBuilder>> {
         let working_directory = self.working_directory().or_else(|| cwd);
         TerminalBuilder::new(
@@ -2493,8 +2140,6 @@ impl Terminal {
             self.template.cursor_shape,
             self.template.alternate_scroll,
             self.template.max_scroll_history_lines,
-            self.template.path_hyperlink_regexes.clone(),
-            self.template.path_hyperlink_timeout,
             self.is_remote_terminal,
             self.template.window_id,
             cx,
@@ -2762,14 +2407,6 @@ fn normalize_script_command_name(argument: &str) -> Option<String> {
         .and_then(normalize_path_command_name)
 }
 
-fn content_index_for_mouse(pos: GpuiPoint<Pixels>, terminal_bounds: &TerminalBounds) -> usize {
-    let col = (pos.x / terminal_bounds.cell_width()).round() as usize;
-    let clamped_col = min(col, terminal_bounds.num_columns().saturating_sub(1));
-    let row = (pos.y / terminal_bounds.line_height()).round() as usize;
-    let clamped_row = min(row, terminal_bounds.num_lines().saturating_sub(1));
-    clamped_row * terminal_bounds.num_columns() + clamped_col
-}
-
 /// Converts an 8 bit ANSI color to its GPUI equivalent.
 /// Accepts `usize` for compatibility with the `alacritty::Colors` interface,
 /// Other than that use case, should only be called with values in the `[0,255]` range
@@ -2865,14 +2502,10 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::{
-        Cell, Content, IndexedCell, TerminalBounds, TerminalBuilder, content_index_for_mouse,
-        rgb_for_index,
-    };
+    use crate::{TerminalBounds, TerminalBuilder, rgb_for_index};
     use collections::HashMap;
-    use gpui::{ClipboardItem, Entity, Pixels, TestAppContext, bounds, point, size};
+    use gpui::{ClipboardItem, Entity, Pixels, TestAppContext, bounds, size};
     use parking_lot::Mutex;
-    use rand::{Rng, distr, rngs::StdRng};
     use task::{Shell, ShellBuilder};
 
     #[test]
@@ -3028,8 +2661,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -3072,8 +2703,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -3169,8 +2798,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -3236,8 +2863,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    vec![],
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -3301,8 +2926,6 @@ mod tests {
                     SettingsCursorShape::default(),
                     AlternateScroll::On,
                     None,
-                    Vec::new(),
-                    Duration::ZERO,
                     false,
                     0,
                     cx,
@@ -3362,87 +2985,6 @@ mod tests {
     }
 
     #[gpui::test]
-    fn test_mouse_to_cell_test(mut rng: StdRng) {
-        const ITERATIONS: usize = 10;
-        const PRECISION: usize = 1000;
-
-        for _ in 0..ITERATIONS {
-            let viewport_cells = rng.random_range(15..20);
-            let cell_size =
-                rng.random_range(5 * PRECISION..20 * PRECISION) as f32 / PRECISION as f32;
-
-            let size = crate::TerminalBounds {
-                cell_width: Pixels::from(cell_size),
-                line_height: Pixels::from(cell_size),
-                bounds: bounds(
-                    GpuiPoint::default(),
-                    size(
-                        Pixels::from(cell_size * (viewport_cells as f32)),
-                        Pixels::from(cell_size * (viewport_cells as f32)),
-                    ),
-                ),
-            };
-
-            let cells = get_cells(size, &mut rng);
-            let content = convert_cells_to_content(size, &cells);
-
-            for row in 0..(viewport_cells - 1) {
-                let row = row as usize;
-                for col in 0..(viewport_cells - 1) {
-                    let col = col as usize;
-
-                    let row_offset = rng.random_range(0..PRECISION) as f32 / PRECISION as f32;
-                    let col_offset = rng.random_range(0..PRECISION) as f32 / PRECISION as f32;
-
-                    let mouse_pos = point(
-                        Pixels::from(col as f32 * cell_size + col_offset),
-                        Pixels::from(row as f32 * cell_size + row_offset),
-                    );
-
-                    let content_index =
-                        content_index_for_mouse(mouse_pos, &content.terminal_bounds);
-                    let mouse_cell = content.cells[content_index].character();
-                    let real_cell = cells[row][col];
-
-                    assert_eq!(mouse_cell, real_cell);
-                }
-            }
-        }
-    }
-
-    #[gpui::test]
-    fn test_mouse_to_cell_clamp(mut rng: StdRng) {
-        let size = crate::TerminalBounds {
-            cell_width: Pixels::from(10.),
-            line_height: Pixels::from(10.),
-            bounds: bounds(
-                GpuiPoint::default(),
-                size(Pixels::from(100.), Pixels::from(100.)),
-            ),
-        };
-
-        let cells = get_cells(size, &mut rng);
-        let content = convert_cells_to_content(size, &cells);
-
-        assert_eq!(
-            content.cells[content_index_for_mouse(
-                point(Pixels::from(-10.), Pixels::from(-10.)),
-                &content.terminal_bounds,
-            )]
-            .character(),
-            cells[0][0]
-        );
-        assert_eq!(
-            content.cells[content_index_for_mouse(
-                point(Pixels::from(1000.), Pixels::from(1000.)),
-                &content.terminal_bounds,
-            )]
-            .character(),
-            cells[9][9]
-        );
-    }
-
-    #[gpui::test]
     async fn test_set_size_coalesces_pixel_only_changes(cx: &mut TestAppContext) {
         let builder = cx.update(|cx| {
             TerminalBuilder::new_display_only(
@@ -3484,42 +3026,6 @@ mod tests {
             terminal.events.back(),
             Some(InternalEvent::Resize(_))
         ));
-    }
-
-    fn get_cells(size: TerminalBounds, rng: &mut StdRng) -> Vec<Vec<char>> {
-        let mut cells = Vec::new();
-
-        for _ in 0..size.num_lines() {
-            let mut row_vec = Vec::new();
-            for _ in 0..size.num_columns() {
-                let cell_char = rng.sample(distr::Alphanumeric) as char;
-                row_vec.push(cell_char)
-            }
-            cells.push(row_vec)
-        }
-
-        cells
-    }
-
-    fn convert_cells_to_content(terminal_bounds: TerminalBounds, cells: &[Vec<char>]) -> Content {
-        let mut ic = Vec::new();
-
-        for (index, row) in cells.iter().enumerate() {
-            for (cell_index, cell_char) in row.iter().enumerate() {
-                let mut cell = Cell::default();
-                cell.set_character(*cell_char);
-                ic.push(IndexedCell {
-                    point: Point::new(index as i32, cell_index),
-                    cell,
-                });
-            }
-        }
-
-        Content {
-            cells: ic,
-            terminal_bounds,
-            ..Default::default()
-        }
     }
 
     #[gpui::test]
