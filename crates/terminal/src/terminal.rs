@@ -48,7 +48,7 @@ pub use vte::ansi::{Color, NamedColor, Rgb};
 
 use gpui::{
     App, AppContext as _, BackgroundExecutor, Bounds, ClipboardItem, Context, EventEmitter, Hsla,
-    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, actions, black, px,
+    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, black, px,
 };
 
 #[cfg(not(windows))]
@@ -509,44 +509,6 @@ mod domain_tests {
         }
     }
 }
-
-actions!(
-    terminal,
-    [
-        /// Clears the terminal screen.
-        Clear,
-        /// Copies selected text to the clipboard.
-        Copy,
-        /// Pastes from the clipboard.
-        Paste,
-        /// Pastes the text from the clipboard.
-        PasteText,
-        /// Shows the character palette for special characters.
-        ShowCharacterPalette,
-        /// Searches for text in the terminal.
-        SearchTest,
-        /// Scrolls up by one line.
-        ScrollLineUp,
-        /// Scrolls down by one line.
-        ScrollLineDown,
-        /// Scrolls up by one page.
-        ScrollPageUp,
-        /// Scrolls down by one page.
-        ScrollPageDown,
-        /// Scrolls up by half a page.
-        ScrollHalfPageUp,
-        /// Scrolls down by half a page.
-        ScrollHalfPageDown,
-        /// Scrolls to the top of the terminal buffer.
-        ScrollToTop,
-        /// Scrolls to the bottom of the terminal buffer.
-        ScrollToBottom,
-        /// Toggles vi mode in the terminal.
-        ToggleViMode,
-        /// Selects all text in the terminal.
-        SelectAll,
-    ]
-);
 
 const DEBUG_TERMINAL_WIDTH: Pixels = px(500.);
 const DEBUG_TERMINAL_HEIGHT: Pixels = px(30.);
@@ -1813,8 +1775,6 @@ impl Terminal {
     pub fn mouse_mode(&self, shift: bool) -> bool {
         self.last_content.mode.intersects(Modes::MOUSE_MODE) && !shift
     }
-
-    ///Scroll the terminal
 
     pub fn find_matches(&self, searcher: Search, cx: &Context<Self>) -> Task<Vec<Range>> {
         let term = self.term.clone();
