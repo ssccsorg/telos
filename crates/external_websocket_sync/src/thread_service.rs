@@ -1633,6 +1633,29 @@ pub fn setup_thread_handler(
     log::info!("✅ [THREAD_SERVICE] WebSocket thread handler initialized");
 }
 
+/// How long a new session waits for its connection to be able to name a model.
+///
+/// The provider's key loads asynchronously, and a thread without a model cannot
+/// run a turn, so this bound is what keeps a conversation that starts during the
+/// load from being reported as an aborted turn.
+const MODEL_SELECTION_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How often to look again while waiting. Short enough that a key that has just
+/// loaded is picked up immediately, long enough not to spin.
+const MODEL_SELECTION_RETRY_INTERVAL: Duration = Duration::from_millis(200);
+
+/// The first model of a list, whichever shape the connection reports it in.
+fn first_model_id(list: &acp_thread::AgentModelList) -> Option<acp_thread::AgentModelId> {
+    match list {
+        acp_thread::AgentModelList::Flat(models) => models.first().map(|model| model.id.clone()),
+        acp_thread::AgentModelList::Grouped(groups) => groups
+            .values()
+            .flat_map(|models| models.iter())
+            .next()
+            .map(|model| model.id.clone()),
+    }
+}
+
 /// Create a new ACP thread and send the initial message (synchronous version)
 fn create_new_thread_sync(
     project: Entity<Project>,
@@ -1762,54 +1785,65 @@ fn create_new_thread_sync(
             }
         };
 
-        // Wait for the NativeAgent's model list to be populated.
-        // NativeAgent::new() spawns authenticate_all_language_model_providers()
-        // which runs asynchronously. When it completes, ProviderStateChanged
-        // fires, NativeAgent refreshes its model list. We wait for that refresh.
+        // A new session's thread has no model of its own; it takes one from the
+        // connection's model list, which is empty until the provider's key has
+        // loaded. Waiting for that list to change is not the same as waiting for
+        // something to select: a refresh can arrive while the list is still
+        // empty, and a thread created then has no model, so its first send fails
+        // with "no language model configured" and the caller reports the turn as
+        // aborted. Wait until this session can name a model, and report the wait
+        // when it runs out.
+        //
+        // A registered provider that reuses a built-in provider's id empties this
+        // list for the rest of the process, which is a different failure wearing
+        // the same message.
         let session_id = cx.update(|cx| thread_entity.read(cx).session_id().clone());
+        if let Some(selector) = cx.update(|_cx| connection_for_model.model_selector(&session_id))
         {
-            let mut model_watch = cx.update(|cx| {
-                connection_for_model.model_selector(&session_id)
-                    .and_then(|selector| selector.watch(cx))
-            });
-            if let Some(ref mut watch_rx) = model_watch {
-                let wait_for_models = async {
-                    let _ = watch_rx.changed().await;
-                };
-                let timeout = async {
-                    smol::Timer::after(std::time::Duration::from_secs(15)).await;
-                    log::warn!("[THREAD_SERVICE] Timed out waiting for models (15s), proceeding");
-                };
-                futures::future::select(Box::pin(wait_for_models), Box::pin(timeout)).await;
-            }
-        }
-
-        // The settings system may set the default model to zed.dev (from default.json),
-        // which can't be resolved without a Zed account. The NativeAgent's auto-model
-        // logic uses registry.default_model() which may return None in this case.
-        // If the thread still has no model after the watch fired, explicitly select
-        // the first available model from the authenticated providers.
-        if let Some(selector) = cx.update(|_cx| connection_for_model.model_selector(&session_id)) {
-            let has_model = cx.update(|cx| selector.selected_model(cx)).await;
-            let needs_model = match has_model {
-                Ok(_) => false,
-                Err(_) => true,
-            };
-            if needs_model {
-                let model_list_result = cx.update(|cx| selector.list_models(cx)).await;
-                if let Ok(model_list) = model_list_result {
-                    let first_model_id = match &model_list {
-                        acp_thread::AgentModelList::Flat(models) => models.first().map(|m| m.id.clone()),
-                        acp_thread::AgentModelList::Grouped(groups) => {
-                            groups.values().flat_map(|v| v.iter()).next().map(|m| m.id.clone())
+            let deadline = Instant::now() + MODEL_SELECTION_TIMEOUT;
+            let mut reported = false;
+            loop {
+                if cx.update(|cx| selector.selected_model(cx)).await.is_ok() {
+                    break;
+                }
+                // The configured default is not enough on its own: it can name a
+                // model the provider does not offer (zed.dev needs an account, and
+                // a settings file can name a model that only exists elsewhere), so
+                // take the first model this connection can resolve.
+                match cx.update(|cx| selector.list_models(cx)).await {
+                    Ok(list) => {
+                        if let Some(model_id) = first_model_id(&list) {
+                            if let Err(error) = cx
+                                .update(|cx| selector.select_model(model_id.clone(), cx))
+                                .await
+                            {
+                                log::warn!(
+                                    "[THREAD_SERVICE] Failed to select {model_id} for session {session_id}: {error}"
+                                );
+                                break;
+                            }
                         }
-                    };
-                    if let Some(model_id) = first_model_id {
-                        if let Err(e) = cx.update(|cx| selector.select_model(model_id.clone(), cx)).await {
-                            log::warn!("[THREAD_SERVICE] Failed to select model: {}", e);
+                    }
+                    Err(error) => {
+                        // An empty list means the key is still loading, which is
+                        // the ordinary case here rather than an error.
+                        if !reported {
+                            log::warn!(
+                                "[THREAD_SERVICE] No model for session {session_id} yet ({error}); waiting up to {MODEL_SELECTION_TIMEOUT:?}"
+                            );
+                            reported = true;
                         }
                     }
                 }
+                if Instant::now() >= deadline {
+                    log::error!(
+                        "[THREAD_SERVICE] Session {session_id} has no model after {MODEL_SELECTION_TIMEOUT:?}; its first turn will report no language model configured"
+                    );
+                    break;
+                }
+                cx.background_executor()
+                    .timer(MODEL_SELECTION_RETRY_INTERVAL)
+                    .await;
             }
         }
 

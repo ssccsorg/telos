@@ -270,9 +270,16 @@ impl LanguageModels {
     }
 
     fn refresh_list(&mut self, cx: &App) {
-        let providers = LanguageModelRegistry::global(cx)
-            .read(cx)
-            .visible_providers()
+        let visible = LanguageModelRegistry::global(cx).read(cx).visible_providers();
+        for provider in &visible {
+            log::debug!(
+                "provider {} visible, authenticated={}, models={}",
+                provider.id().0,
+                provider.is_authenticated(cx),
+                provider.provided_models(cx).len()
+            );
+        }
+        let providers = visible
             .into_iter()
             .filter(|provider| provider.is_authenticated(cx))
             .collect::<Vec<_>>();

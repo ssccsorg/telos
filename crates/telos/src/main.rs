@@ -86,6 +86,15 @@ fn main() {
         paths::set_custom_data_dir(&data_dir);
     }
 
+    // `zlog` is the logger this crate family uses, and nothing installed it in
+    // this binary, so every `log::` record in the agent was discarded: the error
+    // paths in this file, and everything the agent core reports when a turn
+    // cannot start, had no destination. `zlog_settings::init` below only adjusts
+    // a filter that had nothing to filter. stderr rather than stdout, because
+    // `--printenv` owns stdout, and the caller parses it.
+    zlog::init();
+    zlog::init_output_stderr();
+
     // Headless runtime: gpui::HeadlessPlatform over ThreadedDispatcher. The
     // windowed platform backends (gpui_macos/gpui_linux via gpui_platform) are
     // deliberately out of the agent graph (issue #3).
