@@ -94,6 +94,17 @@ Current divergences:
   began bounding its dispatch-chain stack usage. The bound belongs to the SDK,
   and the 512 KiB macOS GCD worker stacks belong to this cut's platform layer,
   so telos keeps the dedicated thread and the comment that explains it.
+- `crates/gpui` and the platform crates were not ported in the 2026-09 round.
+  Upstream changed 83 files in that window and none came across; the cut keeps
+  its own surface and the only additions are the no-op `ActivityGuard` and
+  `App::prevent_idle_sleep`. A later round ports the upstream changes
+  selectively, as the crate map calls for.
+- `crates/acp_thread`'s test module is adapted to this cut. The idle-sleep suite
+  and its helpers are gone, because the feature has no observable behavior here:
+  the gpui `ActivityGuard` is a no-op and the test-support accounting upstream
+  pairs with it is not in the cut. Two markdown-rendering tests are gone with
+  the markdown crate, and the pinned serialization expectations follow the
+  ported formats. The suite runs 134 tests.
 
 ## Boundary and Invariants
 
