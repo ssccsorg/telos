@@ -927,14 +927,31 @@ impl AcpConnection {
             }
         });
 
+        // `connect_client_future` installs the production handler set and
+        // hands us back both the connection-future and a oneshot receiver
+        // that produces the `ConnectionTo<Agent>` once the transport
+        // handshake is ready. The future must be polled on a dedicated
+        // thread rather than via `background_spawn`: in unoptimized builds
+        // its dispatch chain needs ~0.5 MiB of stack per inbound message,
+        // which overflows the fixed 512 KiB stacks of the GCD workers that
+        // poll background tasks on macOS, crashing dev builds as soon as an
+        // agent sends its first message. See `spawn_dedicated` for the
+        // stack guarantee that makes the dedicated thread sufficient.
+        //
+        // telos keeps this site on `spawn_dedicated` even though upstream
+        // moved it to `background_spawn` when the ACP SDK began bounding its
+        // dispatch-chain stack usage: the bound belongs to the SDK, and the
+        // 512 KiB worker stacks belong to this cut's platform layer.
         let (connection_tx, connection_rx) = futures::channel::oneshot::channel();
         let connection_future =
             connect_client_future("zed", transport, dispatch_tx.clone(), connection_tx);
-        let io_task = cx.background_spawn(async move {
-            if let Err(err) = connection_future.await {
-                log::error!("ACP connection error: {err}");
-            }
-        });
+        let io_task = cx
+            .background_executor()
+            .spawn_dedicated(move |_executor| async move {
+                if let Err(err) = connection_future.await {
+                    log::error!("ACP connection error: {err}");
+                }
+            });
 
         let connection_rx = async move {
             connection_rx
