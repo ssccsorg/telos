@@ -94,6 +94,11 @@ Current divergences:
   began bounding its dispatch-chain stack usage. The bound belongs to the SDK,
   and the 512 KiB macOS GCD worker stacks belong to this cut's platform layer,
   so telos keeps the dedicated thread and the comment that explains it.
+- `crates/sandbox` carries upstream's fd-handle form (`as_fd()`, `BorrowedFd`)
+  and the root declares `nix = "0.30"` to match. Upstream made that pair
+  together. The port first took the code without the version, which compiles on
+  macOS because those blocks are `cfg(target_os = "linux")` and fails on the
+  gate image.
 - `crates/gpui` and the platform crates were not ported in the 2026-09 round.
   Upstream changed 83 files in that window and none came across; the cut keeps
   its own surface and the only additions are the no-op `ActivityGuard` and
@@ -260,6 +265,15 @@ Run in order. A gate that fails blocks the port.
    profile or patch warnings. This is the builds-in-telos gate for every
    zed-derived crate, diverging or not. Stale profile package specs and
    unused `[patch]` entries are removed as part of the strip.
+2b. Linux-only surface (host step). A host check is macOS, so it never
+   compiles `cfg(target_os = "linux")` blocks. Cross-check every changed crate
+   that carries one: `cargo check -p <crate> --target x86_64-unknown-linux-gnu`,
+   after `rustup target add x86_64-unknown-linux-gnu`. Build scripts that need
+   a Linux C toolchain make this unusable across the whole workspace, so scope
+   it to the crates that carry the blocks. The gate image remains the
+   authority; this step exists to fail on the host instead, and a dependency
+   bump that moves a crate's API belongs to the same check as the code that
+   uses it.
 3. Telos-owned tests (CI, gate image). `cargo test -p telos`: the launch
    env mapping tests in `crates/telos/src/main.rs` plus any other unit
    tests in the crate.

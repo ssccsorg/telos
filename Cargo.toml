@@ -400,7 +400,7 @@ minidumper = "0.11"
 moka = { version = "0.12.10", features = ["sync"] }
 nanoid = "0.4"
 nbformat = "1.2.0"
-nix = "0.29"
+nix = "0.30"
 notify-rust = "4"
 nucleo = "0.5"
 num-format = "0.4.4"
