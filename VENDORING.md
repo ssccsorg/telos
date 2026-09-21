@@ -29,13 +29,15 @@ The zed-derived crates under `crates/`, everything except the telos-owned
 `crates/telos` and the helix-ported `crates/external_websocket_sync`, were
 copied from upstream zed at this pinned base:
 
-    zed-industries/zed @ e3adf43f37d7a2a9c165a78b255d293b0848d2d0
-    main, 2026-08-28, "Show last recently used commands on top of the
-    picker's list (#63388)"
+    zed-industries/zed @ ca49b5dac8178e87eed4b6af55ebcac73c6d1677
+    main, 2026-09-21, "agent_ui: Make provider-owned terminals read-only
+    (#64550)"
 
-Absorbed into telos on 2026-08-29 (telos `0a506ee`). At that time the copied
-crates were byte-identical to the reference; spot checks were
-`crates/text/src/text.rs` and `crates/sum_tree/src/sum_tree.rs`.
+Absorbed into telos on 2026-08-29 (telos `0a506ee`), then ported forward on
+2026-09-21 (telos `81eaeb5`) with the `agent-client-protocol` 2.2.0 schema
+upgrade. The absorption's spot checks were `crates/text/src/text.rs` and
+`crates/sum_tree/src/sum_tree.rs`. The port, its classification, and its
+gate results live in `docs/sync/2026-09.md`.
 
 The pin is a diff baseline, not a promise of identity. Telos now diverges
 from upstream on purpose (see Crate Map and Divergences). Before any port,
@@ -71,6 +73,22 @@ Current divergences:
   pid_getter, task) is unchanged.
 - The build image no longer installs `libfontconfig-dev`; the pruned graph
   links nothing that needs it.
+- `crates/util` carries `fs_embed`, which upstream moved settings and asset
+  loading onto. `crates/assets` and `crates/settings` use it, and the root
+  `rust-embed` declaration keeps its `compression` feature because `fs_embed`
+  reaches for `rust_embed::flate`. `arc-swap` joins the workspace dependencies.
+- `crates/buffer_diff` adopts upstream's `DiffOperations`, which replaced the
+  pin's `DiffBaseKind` parameter.
+- The gpui cut carries a no-op `ActivityGuard` and `App::prevent_idle_sleep` so
+  ported agent code compiles unchanged. A headless server has no desktop idle
+  sleep. The test-support accounting upstream pairs with it is absent, so
+  `acp_thread`'s idle-sleep tests do not compile under `--all-targets`.
+- `crates/language_models` keeps the retained provider set (anthropic, open_ai,
+  deepseek and the compatible variants) and takes their upstream behavior while
+  dropping the `ui`-backed settings views, which switch to `crates/icons`.
+- `assets/settings/default.json` is part of the port surface, not a build
+  detail: `crates/settings` embeds it through `fs_embed!`, so a stale copy
+  panics `agent_settings` at startup and no compile step catches it.
 
 ## Boundary and Invariants
 
