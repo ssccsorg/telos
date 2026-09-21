@@ -89,6 +89,11 @@ Current divergences:
 - `assets/settings/default.json` is part of the port surface, not a build
   detail: `crates/settings` embeds it through `fs_embed!`, so a stale copy
   panics `agent_settings` at startup and no compile step catches it.
+- `crates/agent_servers` polls the ACP connection future on `spawn_dedicated`
+  rather than `background_spawn`. Upstream moved that site when the ACP SDK
+  began bounding its dispatch-chain stack usage. The bound belongs to the SDK,
+  and the 512 KiB macOS GCD worker stacks belong to this cut's platform layer,
+  so telos keeps the dedicated thread and the comment that explains it.
 
 ## Boundary and Invariants
 
