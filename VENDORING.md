@@ -29,13 +29,15 @@ The zed-derived crates under `crates/`, everything except the telos-owned
 `crates/telos` and the helix-ported `crates/external_websocket_sync`, were
 copied from upstream zed at this pinned base:
 
-    zed-industries/zed @ e3adf43f37d7a2a9c165a78b255d293b0848d2d0
-    main, 2026-08-28, "Show last recently used commands on top of the
-    picker's list (#63388)"
+    zed-industries/zed @ ca49b5dac8178e87eed4b6af55ebcac73c6d1677
+    main, 2026-09-21, "agent_ui: Make provider-owned terminals read-only
+    (#64550)"
 
-Absorbed into telos on 2026-08-29 (telos `0a506ee`). At that time the copied
-crates were byte-identical to the reference; spot checks were
-`crates/text/src/text.rs` and `crates/sum_tree/src/sum_tree.rs`.
+Absorbed into telos on 2026-08-29 (telos `0a506ee`), then ported forward on
+2026-09-21 (telos `81eaeb5`) with the `agent-client-protocol` 2.2.0 schema
+upgrade. The absorption's spot checks were `crates/text/src/text.rs` and
+`crates/sum_tree/src/sum_tree.rs`. The port, its classification, and its
+gate results live in `docs/sync/2026-09.md`.
 
 The pin is a diff baseline, not a promise of identity. Telos now diverges
 from upstream on purpose (see Crate Map and Divergences). Before any port,
@@ -71,6 +73,43 @@ Current divergences:
   pid_getter, task) is unchanged.
 - The build image no longer installs `libfontconfig-dev`; the pruned graph
   links nothing that needs it.
+- `crates/util` carries `fs_embed`, which upstream moved settings and asset
+  loading onto. `crates/assets` and `crates/settings` use it, and the root
+  `rust-embed` declaration keeps its `compression` feature because `fs_embed`
+  reaches for `rust_embed::flate`. `arc-swap` joins the workspace dependencies.
+- `crates/buffer_diff` adopts upstream's `DiffOperations`, which replaced the
+  pin's `DiffBaseKind` parameter.
+- The gpui cut carries a no-op `ActivityGuard` and `App::prevent_idle_sleep` so
+  ported agent code compiles unchanged. A headless server has no desktop idle
+  sleep. The test-support accounting upstream pairs with it is absent, so
+  `acp_thread`'s idle-sleep tests do not compile under `--all-targets`.
+- `crates/language_models` keeps the retained provider set (anthropic, open_ai,
+  deepseek and the compatible variants) and takes their upstream behavior while
+  dropping the `ui`-backed settings views, which switch to `crates/icons`.
+- `assets/settings/default.json` is part of the port surface, not a build
+  detail: `crates/settings` embeds it through `fs_embed!`, so a stale copy
+  panics `agent_settings` at startup and no compile step catches it.
+- `crates/agent_servers` polls the ACP connection future on `spawn_dedicated`
+  rather than `background_spawn`. Upstream moved that site when the ACP SDK
+  began bounding its dispatch-chain stack usage. The bound belongs to the SDK,
+  and the 512 KiB macOS GCD worker stacks belong to this cut's platform layer,
+  so telos keeps the dedicated thread and the comment that explains it.
+- `crates/sandbox` carries upstream's fd-handle form (`as_fd()`, `BorrowedFd`)
+  and the root declares `nix = "0.30"` to match. Upstream made that pair
+  together. The port first took the code without the version, which compiles on
+  macOS because those blocks are `cfg(target_os = "linux")` and fails on the
+  gate image.
+- `crates/gpui` and the platform crates were not ported in the 2026-09 round.
+  Upstream changed 83 files in that window and none came across; the cut keeps
+  its own surface and the only additions are the no-op `ActivityGuard` and
+  `App::prevent_idle_sleep`. A later round ports the upstream changes
+  selectively, as the crate map calls for.
+- `crates/acp_thread`'s test module is adapted to this cut. The idle-sleep suite
+  and its helpers are gone, because the feature has no observable behavior here:
+  the gpui `ActivityGuard` is a no-op and the test-support accounting upstream
+  pairs with it is not in the cut. Two markdown-rendering tests are gone with
+  the markdown crate, and the pinned serialization expectations follow the
+  ported formats. The suite runs 134 tests.
 
 ## Boundary and Invariants
 
@@ -226,6 +265,15 @@ Run in order. A gate that fails blocks the port.
    profile or patch warnings. This is the builds-in-telos gate for every
    zed-derived crate, diverging or not. Stale profile package specs and
    unused `[patch]` entries are removed as part of the strip.
+2b. Linux-only surface (host step). A host check is macOS, so it never
+   compiles `cfg(target_os = "linux")` blocks. Cross-check every changed crate
+   that carries one: `cargo check -p <crate> --target x86_64-unknown-linux-gnu`,
+   after `rustup target add x86_64-unknown-linux-gnu`. Build scripts that need
+   a Linux C toolchain make this unusable across the whole workspace, so scope
+   it to the crates that carry the blocks. The gate image remains the
+   authority; this step exists to fail on the host instead, and a dependency
+   bump that moves a crate's API belongs to the same check as the code that
+   uses it.
 3. Telos-owned tests (CI, gate image). `cargo test -p telos`: the launch
    env mapping tests in `crates/telos/src/main.rs` plus any other unit
    tests in the crate.

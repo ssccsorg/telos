@@ -119,7 +119,7 @@ fn run_headless(cx: &mut App) -> Result<()> {
     let client = Client::production(cx);
 
     // Filesystem.
-    let fs: Arc<dyn Fs> = Arc::new(RealFs::new(None, cx.background_executor().clone()));
+    let fs: Arc<dyn Fs> = RealFs::new(None, cx.background_executor().clone());
     <dyn Fs>::set_global(fs.clone(), cx);
 
     // Language registry.

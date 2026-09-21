@@ -30,7 +30,7 @@ use http_client::{HttpClient, Url};
 use smallvec::SmallVec;
 
 use crate::{
-    Action, ActionBuildError, ActionRegistry, Any, AnyWindowHandle, AppContext, Arena, ArenaBox,
+    Action, ActionBuildError, ActionRegistry, ActivityGuard, Any, AnyWindowHandle, AppContext, Arena, ArenaBox,
     Asset, AssetSource, BackgroundExecutor, ClipboardItem, ClipboardReadError, DisplayId,
     EventEmitter, ForegroundExecutor, Global, KeyBinding, KeyContext, Keymap, Keystroke, Menu,
     MenuItem, OwnedMenu, PathPromptOptions, Platform, PlatformDisplay,
@@ -399,6 +399,11 @@ pub struct App {
 }
 
 impl App {
+    /// Headless no-op. See [`ActivityGuard`].
+    pub fn prevent_idle_sleep(&self, _reason: &str) -> Task<Result<ActivityGuard>> {
+        Task::ready(Ok(ActivityGuard::noop()))
+    }
+
     #[allow(clippy::new_ret_no_self)]
     pub(crate) fn new_app(
         platform: Rc<dyn Platform>,

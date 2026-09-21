@@ -31,8 +31,9 @@ struct McpServerInstance {
     status: McpServerStatus,
 }
 
+/// Connection state of one MCP server, as reported by [`McpManager`].
 #[derive(Clone, Debug, PartialEq)]
-enum McpServerStatus {
+pub enum McpServerStatus {
     Starting,
     Running,
     Stopped,
