@@ -4,6 +4,7 @@ use futures::{FutureExt, StreamExt, future::BoxFuture};
 use gpui::{App, AsyncApp, Entity, Task};
 use http_client::{CustomHeaders, HttpClient};
 use icons::IconName;
+use language_model::chat_completion::ChatCompletionEventMapper;
 use language_model::{
     AuthenticateError, IconOrSvg, LanguageModel, LanguageModelCompletionError,
     LanguageModelCompletionEvent, LanguageModelEffortLevel, LanguageModelId, LanguageModelName,
@@ -20,9 +21,7 @@ use settings::Settings;
 use std::sync::Arc;
 
 use crate::provider::api_compatible::{ApiCompatibleProviderSettings, ApiCompatibleProviderState};
-use crate::provider::open_ai::{
-    OpenAiEventMapper, OpenAiResponseEventMapper, into_open_ai, into_open_ai_response,
-};
+use crate::provider::open_ai::{OpenAiResponseEventMapper, into_open_ai, into_open_ai_response};
 pub use settings::OpenAiCompatibleAvailableModel as AvailableModel;
 pub use settings::OpenAiCompatibleModelCapabilities as ModelCapabilities;
 
@@ -417,7 +416,7 @@ impl LanguageModel for OpenAiCompatibleLanguageModel {
             let completions = self.stream_completion(request, cx);
             let executor = cx.background_executor().clone();
             async move {
-                let mapper = OpenAiEventMapper::new();
+                let mapper = ChatCompletionEventMapper::new();
                 Ok(language_model::stream_in_background(
                     mapper.map_stream(completions.await?).boxed(),
                     executor,

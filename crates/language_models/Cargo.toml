@@ -10,8 +10,10 @@ workspace = true
 
 [lib]
 path = "src/language_models.rs"
+doctest = false
 
 [features]
+test-support = []
 default = ["extension-support"]
 # Extension-hosted LLM providers (wasm extensions). telos uses only
 # the built-in providers and disables this to drop the wasmtime/cranelift

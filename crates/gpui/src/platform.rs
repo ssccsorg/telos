@@ -173,6 +173,21 @@ impl From<u64> for WindowId {
     }
 }
 
+/// A guard that keeps the system awake for as long as it is held. The
+/// headless graph never manages desktop idle sleep, so acquiring one is a
+/// no-op. The type exists so that ported agent code that holds a guard
+/// compiles unchanged, and it is the only idle-sleep surface the cut keeps.
+pub struct ActivityGuard {
+    _private: (),
+}
+
+impl ActivityGuard {
+    /// A guard that holds nothing and expires immediately.
+    pub fn noop() -> Self {
+        Self { _private: () }
+    }
+}
+
 /// A handle to a window with any root view type, which can be downcast to a
 /// window with a specific root view type. The downcast/update/read methods
 /// live with the window ui cluster; the platform core keeps the identity.

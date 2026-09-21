@@ -118,6 +118,7 @@ pub enum IconName {
     FileToml,
     FileTree,
     Filter,
+    FilterFunnel,
     Flame,
     FoldVertical,
     Folder,
