@@ -1079,6 +1079,13 @@ async fn test_tool_hallucination(cx: &mut TestAppContext) {
     assert_eq!(tool_call.status, acp::ToolCallStatus::Pending);
     let update = expect_tool_call_update_fields(&mut events).await;
     assert_eq!(update.fields.status, Some(acp::ToolCallStatus::Failed));
+    // The reason travels as the result's output as well as its content. A client renders
+    // a failed tool call from the raw output, so a result without one shows the failure
+    // and nothing that explains it.
+    assert_eq!(
+        update.fields.raw_output,
+        Some(json!("No tool named nonexistent_tool exists"))
+    );
 }
 
 /// Regression test: some providers (confirmed on Bedrock Mantle/GPT-5.x)

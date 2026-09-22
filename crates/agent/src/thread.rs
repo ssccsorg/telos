@@ -3535,16 +3535,10 @@ impl Thread {
         self.send_or_update_tool_use(&tool_use, title, kind, owning_message_ix, event_stream);
 
         let Some(tool) = tool else {
-            let content = format!("No tool named {} exists", tool_use.name);
+            let message = format!("No tool named {} exists", tool_use.name);
             return Some(Task::ready((
                 owning_message_ix,
-                LanguageModelToolResult {
-                    content: vec![LanguageModelToolResultContent::Text(Arc::from(content))],
-                    tool_use_id: tool_use.id,
-                    tool_name: tool_use.name,
-                    is_error: true,
-                    output: None,
-                },
+                failed_tool_result(tool_use.id, tool_use.name, message),
             )));
         };
 
@@ -3555,15 +3549,7 @@ impl Thread {
             Err(error) => {
                 return Some(Task::ready((
                     owning_message_ix,
-                    LanguageModelToolResult {
-                        content: vec![LanguageModelToolResultContent::Text(Arc::from(
-                            error.to_string(),
-                        ))],
-                        tool_use_id: tool_use.id,
-                        tool_name: tool_use.name,
-                        is_error: true,
-                        output: None,
-                    },
+                    failed_tool_result(tool_use.id, tool_use.name, error.to_string()),
                 )));
             }
         };
@@ -3645,15 +3631,11 @@ impl Thread {
         {
             return Task::ready((
                 owning_message_ix,
-                LanguageModelToolResult {
+                failed_tool_result(
                     tool_use_id,
                     tool_name,
-                    is_error: true,
-                    content: vec![LanguageModelToolResultContent::Text(Arc::from(
-                        "workspace has become restricted",
-                    ))],
-                    output: None,
-                },
+                    "workspace has become restricted".to_string(),
+                ),
             ));
         }
 
@@ -3760,16 +3742,10 @@ impl Thread {
         let tool = self.tool(tool_use.name.as_ref());
 
         let Some(tool) = tool else {
-            let content = format!("No tool named {} exists", tool_use.name);
+            let message = format!("No tool named {} exists", tool_use.name);
             return Some(Task::ready((
                 owning_message_ix,
-                LanguageModelToolResult {
-                    content: vec![LanguageModelToolResultContent::Text(Arc::from(content))],
-                    tool_use_id: tool_use.id,
-                    tool_name: tool_use.name,
-                    is_error: true,
-                    output: None,
-                },
+                failed_tool_result(tool_use.id, tool_use.name, message),
             )));
         };
 
@@ -5368,6 +5344,30 @@ pub(crate) fn scoped_tool_call_id(
     // `message_ix` is non-zero-padded decimal, so the `:` delimiter is always
     // unambiguous -- this would break if the index were zero-padded.
     acp::ToolCallId::new(format!("{message_ix}:{tool_use_id}"))
+}
+
+/// A failure result for a tool call that never reached a tool.
+///
+/// The message is the structured output as well as the model-facing content. A client
+/// renders a failed tool call from the raw output, so a result that carries none shows
+/// its status and nothing else, and the reason is lost to whoever reads the thread even
+/// though the model was given it. Errors that pass through `Erased::run` set both, and
+/// this keeps the hand-built failures in step with them.
+fn failed_tool_result(
+    tool_use_id: LanguageModelToolUseId,
+    tool_name: Arc<str>,
+    message: String,
+) -> LanguageModelToolResult {
+    let content = vec![LanguageModelToolResultContent::Text(Arc::from(
+        message.as_str(),
+    ))];
+    LanguageModelToolResult {
+        content,
+        tool_use_id,
+        tool_name,
+        is_error: true,
+        output: Some(serde_json::Value::String(message)),
+    }
 }
 
 #[derive(Clone)]
