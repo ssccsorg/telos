@@ -8,6 +8,8 @@
 
 mod stub_backend;
 
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -16,8 +18,7 @@ use fs::{Fs, RealFs};
 use gpui::{App, AppContext as _, Application, TaskExt as _};
 use language::LanguageRegistry;
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
-use project::{project_settings::ProjectSettings, Project};
-use settings::Settings as _;
+use project::{trusted_worktrees::DbTrustedPaths, Project};
 use watch;
 
 /// Actus drives telos through a launch contract of `TELOS_*` environment
@@ -62,6 +63,47 @@ fn user_data_dir_from_args(args: &[String]) -> Option<String> {
         index += 1;
     }
     None
+}
+
+/// Extracts the positional workdir from the process arguments.
+///
+/// Actus launches with `--headless --allow-multiple-instances --user-data-dir <dir>
+/// <workdir>`, so a flag value must be skipped rather than read as the path. The result is
+/// canonicalized when the directory exists, because the worktree is created from its
+/// canonical form and a trust entry has to name the same directory to cover it.
+fn workdir_from_args(args: &[String]) -> Option<PathBuf> {
+    let mut workdir = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--user-data-dir" => index += 2,
+            flag if flag.starts_with('-') => index += 1,
+            path => {
+                workdir = Some(PathBuf::from(path));
+                index += 1;
+            }
+        }
+    }
+    workdir.map(|path| std::fs::canonicalize(&path).unwrap_or(path))
+}
+
+/// The trust a headless start declares, in the shape [`project::trusted_worktrees::init`]
+/// expects.
+///
+/// A headless agent has nobody to answer the trust question a fresh worktree raises, and an
+/// untrusted worktree restricts the workspace: the terminal and `fetch` are withheld from
+/// the model, and worktree-local skills and settings are held back. The launch contract
+/// names the one directory the agent was pointed at, so trusting that path is the whole of
+/// the decision.
+///
+/// This cannot ride on a setting. `SettingsStore::override_global` is documented as
+/// overwritten when the settings change, and a recomputation happens inside a session,
+/// which is enough to take the terminal away mid-turn.
+fn trusted_paths_for(workdir: Option<&Path>) -> DbTrustedPaths {
+    match workdir {
+        Some(path) => HashMap::from_iter([(None, HashSet::from_iter([path.to_path_buf()]))]),
+        None => DbTrustedPaths::default(),
+    }
 }
 
 fn main() {
@@ -111,7 +153,12 @@ fn run_headless(cx: &mut App) -> Result<()> {
     settings::init(cx);
     zlog_settings::init(cx);
     feature_flags::FeatureFlagStore::init(cx);
-    project::trusted_worktrees::init(Default::default(), cx);
+
+    // Trust is settled before the project exists. The entries are consumed when the
+    // worktree store is registered, and a `can_trust` call that lands first would mark the
+    // worktree restricted instead.
+    let workdir = workdir_from_args(&std::env::args().skip(1).collect::<Vec<_>>());
+    project::trusted_worktrees::init(trusted_paths_for(workdir.as_deref()), cx);
 
     // HTTP client and collab client.
     let http = reqwest_client::ReqwestClient::new();
@@ -156,11 +203,9 @@ fn run_headless(cx: &mut App) -> Result<()> {
         language_models::init(user_store.clone(), client.clone(), cx);
     }
 
-    // Headless project with trusted worktrees.
-    let mut project_settings = ProjectSettings::get_global(cx).clone();
-    project_settings.session.trust_all_worktrees = true;
-    ProjectSettings::override_global(project_settings, cx);
-
+    // Headless project. The worktrees it opens are trusted through the store seeded above,
+    // not through a setting: `session.trust_all_worktrees` is dropped on the next settings
+    // recomputation, and the restriction that follows withholds the terminal from the model.
     let project = Project::local(
         client.clone(),
         node_runtime,
@@ -175,24 +220,8 @@ fn run_headless(cx: &mut App) -> Result<()> {
         cx,
     );
 
-    // Worktree from the CLI path. Actus launches with
-    // `--headless --allow-multiple-instances --user-data-dir <dir> <workdir>`,
-    // so flag values must be skipped before picking the positional workdir.
-    let raw_args: Vec<String> = std::env::args().skip(1).collect();
-    let mut workdir_path: Option<std::path::PathBuf> = None;
-    let mut i = 0;
-    while i < raw_args.len() {
-        match raw_args[i].as_str() {
-            "--user-data-dir" => {
-                i += 2; // skip the flag and its value
-                continue;
-            }
-            flag if flag.starts_with('-') => {}
-            path => workdir_path = Some(std::path::PathBuf::from(path)),
-        }
-        i += 1;
-    }
-    if let Some(path) = workdir_path {
+    // Worktree from the CLI path, the same path the trust seed above names.
+    if let Some(path) = workdir {
         let project_clone = project.clone();
         let fs_clone = fs.clone();
         cx.spawn(async move |cx| {
@@ -240,7 +269,10 @@ fn run_headless(cx: &mut App) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_launch_env, user_data_dir_from_args};
+    use super::{
+        map_launch_env, trusted_paths_for, user_data_dir_from_args, workdir_from_args,
+        DbTrustedPaths, HashSet, Path, PathBuf,
+    };
 
     // Env mutation is process-global; serialize the two tests.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -268,6 +300,35 @@ mod tests {
         for key in TELOS_KEYS.iter().chain(MAPPED_KEYS.iter()) {
             std::env::remove_var(key);
         }
+    }
+
+    #[test]
+    fn the_launch_workdir_is_the_only_trusted_path() {
+        // The subdirectory does not exist, so the canonicalization falls back to the
+        // argument itself and the assertion does not depend on the host's symlinks.
+        let workdir_path = "/tmp/kletos-test-does-not-exist/workdir";
+        let args: Vec<String> = [
+            "--headless",
+            "--allow-multiple-instances",
+            "--user-data-dir",
+            "/tmp/kletos-test-user-data",
+            workdir_path,
+        ]
+        .iter()
+        .map(|arg| arg.to_string())
+        .collect();
+
+        let workdir = workdir_from_args(&args);
+        assert_eq!(workdir.as_deref(), Some(Path::new(workdir_path)));
+
+        let mut expected = DbTrustedPaths::default();
+        expected.insert(None, HashSet::from_iter([PathBuf::from(workdir_path)]));
+        assert_eq!(trusted_paths_for(workdir.as_deref()), expected);
+
+        // A start with no workdir declares no trust. It also opens no visible worktree, so
+        // there is nothing a restriction could apply to.
+        assert!(trusted_paths_for(None).is_empty());
+        assert!(workdir_from_args(&["--headless".to_string()]).is_none());
     }
 
     #[test]

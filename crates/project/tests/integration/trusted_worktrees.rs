@@ -600,6 +600,51 @@ async fn test_abs_path_trust_covers_multiple_worktrees(cx: &mut TestAppContext) 
 }
 
 #[gpui::test]
+async fn test_seeded_abs_path_trusts_the_worktree_it_names(cx: &mut TestAppContext) {
+    // The seeding a headless start relies on: a trusted path already in the store when the
+    // worktree store is registered, rather than a trust call made after the fact. Telos
+    // declares its launch workdir this way, because the alternative, a setting, is dropped
+    // on the next settings recomputation, and the `can_trust` call that follows marks the
+    // worktree restricted for the rest of the session.
+    init_test(cx);
+
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(path!("/root/project"), json!({ "main.rs": "fn main() {}" }))
+        .await;
+
+    cx.update(|cx| {
+        init(
+            DbTrustedPaths::from_iter([(
+                None,
+                HashSet::from_iter([PathBuf::from(path!("/root/project"))]),
+            )]),
+            cx,
+        );
+    });
+
+    let project =
+        Project::test_with_worktree_trust(fs, [path!("/root/project").as_ref()], cx).await;
+    let worktree_store = project.read_with(cx, |project, _| project.worktree_store());
+    let worktree_id = worktree_store.read_with(cx, |store, cx| {
+        store.worktrees().next().unwrap().read(cx).id()
+    });
+    let trusted_worktrees =
+        cx.update(|cx| TrustedWorktrees::try_get_global(cx).expect("global should be set"));
+
+    let can_trust = trusted_worktrees.update(cx, |store, cx| {
+        store.can_trust(&worktree_store, worktree_id, cx)
+    });
+    assert!(can_trust, "the seeded path covers the worktree it names");
+
+    let restricted =
+        cx.update(|cx| TrustedWorktrees::has_restricted_worktrees(&worktree_store, cx));
+    assert!(
+        !restricted,
+        "nothing is restricted, so the tools a restriction withholds stay available"
+    );
+}
+
+#[gpui::test]
 async fn test_auto_trust_all(cx: &mut TestAppContext) {
     init_test(cx);
 
