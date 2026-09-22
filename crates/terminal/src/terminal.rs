@@ -24,7 +24,6 @@ use pty_info::{ProcessIdGetter, PtyProcessInfo};
 use serde::{Deserialize, Serialize};
 use task::{HideStrategy, Shell, ShellKind, SpawnInTerminal};
 use terminal_settings::{AlternateScroll, CursorShape as SettingsCursorShape};
-use theme::{ActiveTheme, Theme};
 use util::{ResultExt as _, paths::PathStyle, truncate_and_trailoff};
 
 #[cfg(unix)]
@@ -48,7 +47,7 @@ pub use vte::ansi::{Color, NamedColor, Rgb};
 
 use gpui::{
     App, AppContext as _, BackgroundExecutor, Bounds, ClipboardItem, Context, EventEmitter, Hsla,
-    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, black, px,
+    Keystroke, Pixels, Point as GpuiPoint, Rgba, Size, Task, px,
 };
 
 #[cfg(not(windows))]
@@ -1487,7 +1486,7 @@ impl Terminal {
                 // followed by a color request sequence.
 
                 let color = self.term.lock().colors()[index]
-                    .unwrap_or_else(|| to_vte_rgb(get_color_at_index(index, cx.theme().as_ref())));
+                    .unwrap_or_else(|| to_vte_rgb(get_color_at_index(index)));
                 self.write_to_pty(format(color).into_bytes());
             }
             TerminalBackendEvent::ChildExit(exit_status) => {
@@ -2381,35 +2380,56 @@ fn normalize_script_command_name(argument: &str) -> Option<String> {
         .and_then(normalize_path_command_name)
 }
 
+/// The palette a program inside the terminal is answered with when it asks for a colour.
+///
+/// Programs do ask: `OSC 4`/`10`/`11` queries are how a progress spinner or a
+/// colour-detecting CLI decides whether it is on a light or a dark background, and a
+/// terminal that never answers leaves them waiting for their own timeout.
+///
+/// A windowed app answers from its theme. This terminal has no theme to answer from:
+/// nothing here draws, so no theme is installed, and reaching for one is what killed an
+/// agent the first time a program asked. The palette is therefore a constant, which is
+/// also the only answer a tool terminal can honestly give: there is no person looking at
+/// it, and its colours are not a preference anyone has expressed.
+const ANSI_COLORS: [(u8, u8, u8); 16] = [
+    (0x00, 0x00, 0x00), // black
+    (0xcd, 0x00, 0x00), // red
+    (0x00, 0xcd, 0x00), // green
+    (0xcd, 0xcd, 0x00), // yellow
+    (0x00, 0x00, 0xee), // blue
+    (0xcd, 0x00, 0xcd), // magenta
+    (0x00, 0xcd, 0xcd), // cyan
+    (0xe5, 0xe5, 0xe5), // white
+    (0x7f, 0x7f, 0x7f), // bright black
+    (0xff, 0x00, 0x00), // bright red
+    (0x00, 0xff, 0x00), // bright green
+    (0xff, 0xff, 0x00), // bright yellow
+    (0x5c, 0x5c, 0xff), // bright blue
+    (0xff, 0x00, 0xff), // bright magenta
+    (0x00, 0xff, 0xff), // bright cyan
+    (0xff, 0xff, 0xff), // bright white
+];
+
+const TERMINAL_FOREGROUND: (u8, u8, u8) = (0xd4, 0xd4, 0xd4);
+const TERMINAL_BACKGROUND: (u8, u8, u8) = (0x00, 0x00, 0x00);
+
+/// A dimmed rendition of a colour, for the dim indices the alacritty interface asks for.
+fn dim((r, g, b): (u8, u8, u8)) -> (u8, u8, u8) {
+    let scale = |channel: u8| u8::try_from(u16::from(channel) * 3 / 5).unwrap_or(u8::MAX);
+    (scale(r), scale(g), scale(b))
+}
+
 /// Converts an 8 bit ANSI color to its GPUI equivalent.
 /// Accepts `usize` for compatibility with the `alacritty::Colors` interface,
-/// Other than that use case, should only be called with values in the `[0,255]` range
-pub fn get_color_at_index(index: usize, theme: &Theme) -> Hsla {
-    let colors = theme.colors();
-
-    match index {
-        // 0-15 are the same as the named colors above
-        0 => colors.terminal_ansi_black,
-        1 => colors.terminal_ansi_red,
-        2 => colors.terminal_ansi_green,
-        3 => colors.terminal_ansi_yellow,
-        4 => colors.terminal_ansi_blue,
-        5 => colors.terminal_ansi_magenta,
-        6 => colors.terminal_ansi_cyan,
-        7 => colors.terminal_ansi_white,
-        8 => colors.terminal_ansi_bright_black,
-        9 => colors.terminal_ansi_bright_red,
-        10 => colors.terminal_ansi_bright_green,
-        11 => colors.terminal_ansi_bright_yellow,
-        12 => colors.terminal_ansi_bright_blue,
-        13 => colors.terminal_ansi_bright_magenta,
-        14 => colors.terminal_ansi_bright_cyan,
-        15 => colors.terminal_ansi_bright_white,
+/// Other than that use case, should only be called with values in the `[0,268]` range
+pub fn get_color_at_index(index: usize) -> Hsla {
+    let (r, g, b) = match index {
+        0..=15 => ANSI_COLORS[index],
         // 16-231 are a 6x6x6 RGB color cube, mapped to 0-255 using steps defined by XTerm.
         // See: https://github.com/xterm-x11/xterm-snapshots/blob/master/256colres.pl
         16..=231 => {
             let (r, g, b) = rgb_for_index(index as u8);
-            rgba_color(
+            (
                 if r == 0 { 0 } else { r * 40 + 55 },
                 if g == 0 { 0 } else { g * 40 + 55 },
                 if b == 0 { 0 } else { b * 40 + 55 },
@@ -2417,28 +2437,20 @@ pub fn get_color_at_index(index: usize, theme: &Theme) -> Hsla {
         }
         // 232-255 are a 24-step grayscale ramp from (8, 8, 8) to (238, 238, 238).
         232..=255 => {
-            let i = index as u8 - 232; // Align index to 0..24
-            let value = i * 10 + 8;
-            rgba_color(value, value, value)
+            let value = (index as u8 - 232) * 10 + 8; // Align index to 0..24
+            (value, value, value)
         }
         // For compatibility with the alacritty::Colors interface
         // See: https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/term/color.rs
-        256 => colors.terminal_foreground,
-        257 => colors.terminal_background,
-        258 => theme.players().local().cursor,
-        259 => colors.terminal_ansi_dim_black,
-        260 => colors.terminal_ansi_dim_red,
-        261 => colors.terminal_ansi_dim_green,
-        262 => colors.terminal_ansi_dim_yellow,
-        263 => colors.terminal_ansi_dim_blue,
-        264 => colors.terminal_ansi_dim_magenta,
-        265 => colors.terminal_ansi_dim_cyan,
-        266 => colors.terminal_ansi_dim_white,
-        267 => colors.terminal_bright_foreground,
-        268 => colors.terminal_ansi_black, // 'Dim Background', non-standard color
-
-        _ => black(),
-    }
+        256 => TERMINAL_FOREGROUND,
+        257 => TERMINAL_BACKGROUND,
+        258 => TERMINAL_FOREGROUND, // the cursor
+        259..=266 => dim(ANSI_COLORS[index - 259]),
+        267 => (0xff, 0xff, 0xff), // the bright foreground
+        268 => TERMINAL_BACKGROUND, // 'Dim Background', non-standard color
+        _ => (0x00, 0x00, 0x00),
+    };
+    rgba_color(r, g, b)
 }
 
 /// Generates the RGB channels in [0, 5] for a given index into the 6x6x6 ANSI color cube.
@@ -2956,6 +2968,33 @@ mod tests {
             let (r, g, b) = rgb_for_index(i);
             assert_eq!(i, 16 + 36 * r + 6 * g + b);
         }
+    }
+
+    /// The agent's terminal has no theme, so answering a colour query has to be a
+    /// function of the index alone. This is the value a program that asks for the
+    /// background receives, and asking for it is what used to bring the agent down.
+    #[test]
+    fn test_color_at_index_needs_no_theme() {
+        let answer = |index: usize| format!("{:?}", get_color_at_index(index));
+        let expected = |r: u8, g: u8, b: u8| format!("{:?}", rgba_color(r, g, b));
+
+        // The named colours, and the foreground and background the alacritty
+        // interface asks for.
+        assert_eq!(answer(0), expected(0x00, 0x00, 0x00));
+        assert_eq!(answer(15), expected(0xff, 0xff, 0xff));
+        assert_eq!(answer(256), expected(0xd4, 0xd4, 0xd4));
+        assert_eq!(answer(257), expected(0x00, 0x00, 0x00));
+
+        // The cube and the ramp are the arithmetic they always were.
+        assert_eq!(answer(16), expected(0, 0, 0));
+        assert_eq!(answer(232), expected(8, 8, 8));
+        assert_eq!(answer(255), expected(238, 238, 238));
+
+        // A dim colour is darker than the colour it dims. An index past the table is
+        // black rather than a panic, because the interface asks for whatever the
+        // emulator decides it needs.
+        assert_ne!(answer(260), answer(1));
+        assert_eq!(answer(9999), expected(0, 0, 0));
     }
 
     #[gpui::test]
