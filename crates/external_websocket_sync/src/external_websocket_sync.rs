@@ -112,6 +112,9 @@ pub struct ThreadCreationRequest {
     /// This allows the NewEntry subscription to fire and sync the user message back to Helix,
     /// simulating a user typing directly in Zed's agent panel.
     pub simulate_input: bool,
+    /// Reasoning effort this turn runs at, carried through from the incoming command:
+    /// `low`, `high` or `max`. `None` leaves the thread's own setting alone.
+    pub thinking_effort: Option<String>,
 }
 
 /// Request to open existing ACP thread from database and display in UI

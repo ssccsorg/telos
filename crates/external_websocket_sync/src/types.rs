@@ -394,6 +394,11 @@ pub struct IncomingChatMessage {
     pub agent_name: Option<String>,  // Which agent to use (zed-agent or qwen) - defaults to zed-agent
     #[serde(default)]
     pub interrupt: bool,  // If true, cancel the current running turn before sending this message
+    /// Reasoning effort this turn runs at: `low`, `high` or `max`, the scale the
+    /// provider's API takes. Thinking itself stays on, since the level is a level of
+    /// it; absent leaves the thread's own setting alone.
+    #[serde(default)]
+    pub thinking_effort: Option<String>,
 }
 
 /// Response for health check endpoint

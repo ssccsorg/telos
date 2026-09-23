@@ -1223,6 +1223,7 @@ pub fn setup_thread_handler(
                         request.request_id.clone(),
                         request.message,
                         request.simulate_input,
+                        request.thinking_effort.clone(),
                         cx.clone()
                     ).await;
 
@@ -1281,6 +1282,7 @@ pub fn setup_thread_handler(
                                                 request.request_id.clone(),
                                                 initial_message,
                                                 request.simulate_input,
+                                                request.thinking_effort.clone(),
                                                 cx.clone(),
                                             ).await {
                                                 eprintln!(
@@ -1415,6 +1417,7 @@ pub fn setup_thread_handler(
                                 request.request_id.clone(),
                                 request.message,
                                 request.simulate_input,
+                                request.thinking_effort.clone(),
                                 cx.clone()
                             ).await {
                                 eprintln!("❌ [THREAD_SERVICE] Failed to send message to loaded thread: {}", e);
@@ -1847,6 +1850,13 @@ fn create_new_thread_sync(
             }
         }
 
+        // The reasoning effort the caller asked for, applied after the model was
+        // selected: selecting one writes the effort the settings name, so a value set
+        // before that would be overwritten by it.
+        if let Some(effort) = request_clone.thinking_effort.clone() {
+            cx.update(|cx| apply_thinking_effort(&thread_entity, effort, cx))?;
+        }
+
         // Wait for MCP context server tools to finish loading before sending
         // the first message, so the LLM request includes all available tools.
         let tools_ready_task = cx.update(|cx| connection_for_tools.wait_for_tools_ready(cx));
@@ -1976,15 +1986,54 @@ fn create_new_thread_sync(
 }
 
 /// Handle a follow-up message to an existing thread
+/// Applies the reasoning effort a caller asked for to the thread that runs its turns.
+///
+/// The effort belongs to the turn: the caller picks it per thread, and what carries it
+/// is the connection the thread came through. A connection that cannot carry it is an
+/// error rather than a silent default, so a level the caller named is never quietly
+/// dropped, and the report names the thread it was meant for.
+fn apply_thinking_effort(
+    thread: &Entity<AcpThread>,
+    effort: String,
+    cx: &mut App,
+) -> Result<()> {
+    let session_id = thread.read(cx).session_id().clone();
+    let connection = thread.read(cx).connection().clone();
+    let handle = connection
+        .session_thinking_effort(&session_id, cx)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "the agent of thread {} has no thinking effort to set",
+                session_id
+            )
+        })?;
+    handle.set_thinking_effort(effort, cx)
+}
+
 async fn handle_follow_up_message(
     thread: WeakEntity<AcpThread>,
     thread_id: String,
     request_id: String,
     message: String,
     simulate_input: bool,
+    thinking_effort: Option<String>,
     cx: gpui::AsyncApp,
 ) -> Result<()> {
     log::info!("💬 [THREAD_SERVICE] Sending follow-up message: {} (simulate_input={})", message, simulate_input);
+
+    // The reasoning effort travels with the turn: the caller picks it per thread, and the
+    // agent behind the connection applies it to the thread that runs the turn. Applied
+    // before the message is sent, so this turn's request is built from it.
+    if let Some(effort) = thinking_effort {
+        cx.update(|cx| {
+            let Some(entity) = thread.upgrade() else {
+                return Err(anyhow::anyhow!(
+                    "the thread is gone before its thinking effort could be set"
+                ));
+            };
+            apply_thinking_effort(&entity, effort, cx)
+        })?;
+    }
 
     // CRITICAL: Update the request_id for this thread so message_completed uses the correct ID!
     set_thread_request_id(thread_id.clone(), request_id.clone());

@@ -2584,6 +2584,32 @@ fn strip_slash_command_prefix(text: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The reasoning effort of one session of the native agent.
+///
+/// The agent runs in this process, so the effort is set on the thread that runs the
+/// turn instead of being sent anywhere: ACP carries no such request, and this is the
+/// surface that makes the setting reachable from a caller that holds the connection.
+struct NativeSessionThinkingEffort {
+    session_id: acp::SessionId,
+    connection: NativeAgentConnection,
+}
+
+impl acp_thread::AgentSessionThinkingEffort for NativeSessionThinkingEffort {
+    fn set_thinking_effort(&self, effort: String, cx: &mut App) -> Result<()> {
+        let thread = self.connection.thread(&self.session_id, cx).ok_or_else(|| {
+            anyhow!(
+                "session {} has no thread to set the thinking effort on",
+                self.session_id
+            )
+        })?;
+        thread.update(cx, |thread, cx| {
+            thread.set_thinking_enabled(true, cx);
+            thread.set_thinking_effort(Some(effort), cx);
+        });
+        Ok(())
+    }
+}
+
 struct NativeAgentModelSelector {
     session_id: acp::SessionId,
     connection: NativeAgentConnection,
@@ -2813,6 +2839,21 @@ impl acp_thread::AgentConnection for NativeAgentConnection {
             session_id: session_id.clone(),
             connection: self.clone(),
         }) as Rc<dyn AgentModelSelector>)
+    }
+
+    fn session_thinking_effort(
+        &self,
+        session_id: &acp::SessionId,
+        cx: &App,
+    ) -> Option<Rc<dyn acp_thread::AgentSessionThinkingEffort>> {
+        // A session whose thread is gone has nothing to set, and answering `None` here
+        // is what makes the caller name that rather than a level that quietly did not
+        // apply.
+        self.thread(session_id, cx)?;
+        Some(Rc::new(NativeSessionThinkingEffort {
+            session_id: session_id.clone(),
+            connection: self.clone(),
+        }) as Rc<dyn acp_thread::AgentSessionThinkingEffort>)
     }
 
     fn client_user_message_ids(

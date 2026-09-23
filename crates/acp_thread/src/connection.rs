@@ -252,6 +252,18 @@ pub trait AgentConnection {
         None
     }
 
+    /// A handle for setting this session's reasoning effort, when this connection can
+    /// carry it. A connection whose agent runs elsewhere cannot: ACP has no request for
+    /// it, so the answer is `None`, and the caller reports the level it could not set
+    /// rather than dropping it.
+    fn session_thinking_effort(
+        &self,
+        _session_id: &acp::SessionId,
+        _cx: &App,
+    ) -> Option<Rc<dyn AgentSessionThinkingEffort>> {
+        None
+    }
+
     fn session_list(&self, _cx: &mut App) -> Option<Rc<dyn AgentSessionList>> {
         None
     }
@@ -333,6 +345,20 @@ pub trait AgentSessionConfigOptions {
     fn watch(&self, _cx: &mut App) -> Option<watch::Receiver<()>> {
         None
     }
+}
+
+/// Setting the reasoning effort of one session's turns.
+///
+/// The effort belongs to the turn rather than to the app, so what applies it is the
+/// thread that runs the turn, and only a connection whose agent runs in this process
+/// can reach that thread. This is the other half of
+/// [`AgentConnection::session_thinking_effort`]: it hands back a handle that does the
+/// setting, so a caller holding nothing but the connection can still name a level.
+pub trait AgentSessionThinkingEffort {
+    /// Run this session's turns at `effort`, which the provider maps onto its own
+    /// scale, and with thinking enabled: the level is a level of thinking rather than
+    /// a switch beside it.
+    fn set_thinking_effort(&self, effort: String, cx: &mut App) -> Result<()>;
 }
 
 #[derive(Debug, Clone, Default)]

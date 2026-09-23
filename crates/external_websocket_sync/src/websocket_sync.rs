@@ -454,6 +454,7 @@ impl WebSocketSync {
             request_id: chat_msg.request_id.clone(),
             agent_name: chat_msg.agent_name.clone(),
             simulate_input: false,
+            thinking_effort: chat_msg.thinking_effort.clone(),
         };
 
         eprintln!("🎯 [WEBSOCKET-IN] Calling request_thread_creation()...");
@@ -487,6 +488,7 @@ impl WebSocketSync {
             request_id: chat_msg.request_id.clone(),
             agent_name: chat_msg.agent_name.clone(),
             simulate_input: true,
+            thinking_effort: chat_msg.thinking_effort.clone(),
         };
 
         eprintln!("🎯 [WEBSOCKET-IN] Calling request_thread_creation() with simulate_input=true...");
