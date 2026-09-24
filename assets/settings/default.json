@@ -1289,6 +1289,7 @@
           "apply_code_action": true,
           "ask_user": false,
           "edit_file": true,
+          "enable_context_server": true,
           "write_file": true,
           "fetch": true,
           "find_path": true,

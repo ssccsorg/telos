@@ -8,6 +8,7 @@ mod delete_path_tool;
 mod diagnostics_tool;
 mod edit_file_tool;
 mod edit_session;
+mod enable_context_server_tool;
 #[cfg(all(test, feature = "unit-eval"))]
 mod evals;
 mod fetch_tool;
@@ -79,6 +80,7 @@ pub use create_thread_tool::*;
 pub use delete_path_tool::*;
 pub use diagnostics_tool::*;
 pub use edit_file_tool::*;
+pub use enable_context_server_tool::*;
 pub use fetch_tool::*;
 pub use find_path_tool::*;
 pub use find_references_tool::*;
@@ -205,6 +207,7 @@ tools! {
     DeletePathTool,
     DiagnosticsTool,
     EditFileTool,
+    EnableContextServerTool,
     FetchTool,
     FindPathTool,
     FindReferencesTool,
