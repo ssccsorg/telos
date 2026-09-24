@@ -459,10 +459,30 @@ mod tests {
         assert_eq!(user_data_dir_from_args(&args), None);
     }
 
+    /// The shipped default settings, read from the crate's own path.
+    ///
+    /// `SettingsStore::test` reads them through the asset loader, whose dev arm reads from
+    /// a checkout and panics where there is no `.git` above the binary. That is how the
+    /// image build runs its gate, so the file is read here instead. It is the same file the
+    /// loader would have read, and the path is resolved from the manifest directory, so it
+    /// is the same wherever the source tree is.
+    fn shipped_defaults() -> String {
+        std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/settings/default.json"
+        ))
+        .expect("the shipped default settings are in the checkout")
+    }
+
     /// The operator's settings file is the half of an agent's configuration that is not
     /// compiled in: actus writes it before the agent starts. The headless binary used to
     /// run without ever reading it, so an MCP server, a tool permission or a model the
     /// operator set had no effect. This pins the read.
+    ///
+    /// Building a store reads two assets, and neither read is what this test is about, so
+    /// both are supplied here: the default settings from the crate's own path, and the
+    /// semantic token rules from a global set before the store is built. That keeps the
+    /// test runnable in an image whose source was copied without VCS metadata.
     #[gpui::test]
     async fn the_operators_settings_file_is_loaded(cx: &mut gpui::TestAppContext) {
         use fs::Fs as _;
@@ -480,7 +500,10 @@ mod tests {
         .await;
 
         cx.update(|cx| {
-            let store = settings::SettingsStore::test(cx);
+            cx.set_global(settings::DefaultSemanticTokenRules(
+                settings::SemanticTokenRules::default(),
+            ));
+            let store = settings::SettingsStore::new(cx, &shipped_defaults());
             cx.set_global(store);
             <dyn fs::Fs>::set_global(fs.clone(), cx);
             super::watch_settings_file(fs.clone(), cx);
