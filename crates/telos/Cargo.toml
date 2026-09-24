@@ -45,3 +45,9 @@ zlog_settings.workspace = true
 semver = "1"
 tokio.workspace = true
 watch.workspace = true
+
+[dev-dependencies]
+fs = { workspace = true, features = ["test-support"] }
+gpui = { workspace = true, features = ["test-support"] }
+project = { workspace = true, features = ["test-support"] }
+settings = { workspace = true, features = ["test-support"] }

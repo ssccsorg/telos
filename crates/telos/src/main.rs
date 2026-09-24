@@ -15,7 +15,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use client::{Client, UserStore};
 use fs::{Fs, RealFs};
-use gpui::{App, AppContext as _, Application, TaskExt as _};
+use futures::StreamExt as _;
+use gpui::{App, AppContext as _, Application, TaskExt as _, UpdateGlobal as _};
 use language::LanguageRegistry;
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
 use project::{trusted_worktrees::DbTrustedPaths, Project};
@@ -106,6 +107,47 @@ fn trusted_paths_for(workdir: Option<&Path>) -> DbTrustedPaths {
     }
 }
 
+/// Load the settings file the operator wrote, and keep following it.
+///
+/// Actus writes the agent's half-configured half under `--user-data-dir`: the model
+/// and its reasoning effort, the terminal's tool permission, and the MCP servers in
+/// `context_servers`. The editor loads that file and watches it; this binary was cut
+/// down from the editor, and the load went with it, so every one of those settings
+/// stayed on disk while the agent ran on the compiled-in defaults. The file is the
+/// operator's input, so it is read here.
+///
+/// The read is not blocking and the file does not have to exist when the agent starts:
+/// the watcher reports the file's current content as soon as it can, and every later
+/// change after that. A directory that does not exist is created, because the watcher
+/// needs somewhere to watch; a file that never appears leaves the defaults in place,
+/// which is what a bare `tel` run with no operator configuration should get.
+fn watch_settings_file(fs: Arc<dyn Fs>, cx: &mut App) {
+    cx.spawn(async move |cx| {
+        let config_dir = paths::config_dir().clone();
+        if let Err(error) = fs.create_dir(&config_dir).await {
+            log::error!("telos: cannot create {}: {error}", config_dir.display());
+            return;
+        }
+
+        let settings_path = paths::settings_file().clone();
+        let (mut content_rx, _watcher) =
+            settings::watch_config_file(cx.background_executor(), fs, settings_path.clone());
+
+        while let Some(content) = content_rx.next().await {
+            let applied = cx.update(|cx| {
+                settings::SettingsStore::update_global(cx, |store, cx| {
+                    store.set_user_settings(&content, cx).result()
+                })
+            });
+            match applied {
+                Ok(_) => log::info!("telos: read {}", settings_path.display()),
+                Err(error) => log::error!("telos: ignoring {}: {error}", settings_path.display()),
+            }
+        }
+    })
+    .detach();
+}
+
 fn main() {
     map_launch_env();
     // The shell-env capture invokes this binary with `--printenv` to dump
@@ -168,6 +210,10 @@ fn run_headless(cx: &mut App) -> Result<()> {
     // Filesystem.
     let fs: Arc<dyn Fs> = RealFs::new(None, cx.background_executor().clone());
     <dyn Fs>::set_global(fs.clone(), cx);
+
+    // The configuration actus wrote under `--user-data-dir` is what the operator
+    // chose for this agent, and `settings::init` above reads none of it.
+    watch_settings_file(fs.clone(), cx);
 
     // Language registry.
     let languages = Arc::new(LanguageRegistry::new(cx.background_executor().clone()));
@@ -335,7 +381,15 @@ mod tests {
     fn maps_telos_launch_env_onto_vendored_names() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_env();
-        let values = ["true", "true", "127.0.0.1:8080", "test-token", "1", "ses_t", "always"];
+        let values = [
+            "true",
+            "true",
+            "127.0.0.1:8080",
+            "test-token",
+            "1",
+            "ses_t",
+            "always",
+        ];
         for (key, value) in TELOS_KEYS.iter().zip(values.iter()) {
             std::env::set_var(key, value);
         }
@@ -383,7 +437,10 @@ mod tests {
 
     #[test]
     fn parses_user_data_dir_from_equals_argument() {
-        let args = ["tel".to_string(), "--user-data-dir=/tmp/actus-agent".to_string()];
+        let args = [
+            "tel".to_string(),
+            "--user-data-dir=/tmp/actus-agent".to_string(),
+        ];
         assert_eq!(
             user_data_dir_from_args(&args).as_deref(),
             Some("/tmp/actus-agent")
@@ -400,5 +457,43 @@ mod tests {
     fn returns_none_when_user_data_dir_flag_is_last() {
         let args = ["tel".to_string(), "--user-data-dir".to_string()];
         assert_eq!(user_data_dir_from_args(&args), None);
+    }
+
+    /// The operator's settings file is the half of an agent's configuration that is not
+    /// compiled in: actus writes it before the agent starts. The headless binary used to
+    /// run without ever reading it, so an MCP server, a tool permission or a model the
+    /// operator set had no effect. This pins the read.
+    #[gpui::test]
+    async fn the_operators_settings_file_is_loaded(cx: &mut gpui::TestAppContext) {
+        use fs::Fs as _;
+        use settings::Settings as _;
+
+        let settings_path = paths::settings_file().clone();
+        let fs = fs::FakeFs::new(cx.background_executor.clone());
+        fs.create_dir(settings_path.parent().unwrap())
+            .await
+            .unwrap();
+        fs.insert_file(
+            settings_path,
+            br#"{"context_servers":{"memory":{"command":"/bin/true","enabled":true}}}"#.to_vec(),
+        )
+        .await;
+
+        cx.update(|cx| {
+            let store = settings::SettingsStore::test(cx);
+            cx.set_global(store);
+            <dyn fs::Fs>::set_global(fs.clone(), cx);
+            super::watch_settings_file(fs.clone(), cx);
+        });
+        cx.run_until_parked();
+
+        cx.update(|cx| {
+            let servers =
+                &project::project_settings::ProjectSettings::get_global(cx).context_servers;
+            assert!(
+                servers.get("memory").is_some_and(|server| server.enabled()),
+                "the settings file names an MCP server that must be enabled: {servers:?}"
+            );
+        });
     }
 }
