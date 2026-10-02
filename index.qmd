@@ -142,4 +142,4 @@ system. Third-party dependencies are reported via cargo-about
 
 ---
 
-*Telos is a project of the SSCCS Foundation.*
+*Telos is a project of the SSCCS Initiative.*
