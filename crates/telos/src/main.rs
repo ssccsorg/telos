@@ -22,23 +22,40 @@ use node_runtime::{NodeBinaryOptions, NodeRuntime};
 use project::{trusted_worktrees::DbTrustedPaths, Project};
 use watch;
 
-/// Actus drives telos through a launch contract of `TELOS_*` environment
-/// variables. The zed layer below reads its own `ZED_*` names, so the
+/// Actus drives the agent through a launch contract of `ACPWS_*` environment
+/// variables, named for the protocol the agent speaks: the agent-client protocol
+/// over a WebSocket. The zed layer below reads its own `ZED_*` names, so the
 /// contract names are translated here, before any module initializes.
+///
+/// The contract carried the `TELOS_*` names before it was named for the protocol.
+/// A binary reads those too, with a warning on stderr, so a deployment whose
+/// configuration has not moved with the rename keeps launching. The old names go
+/// away once every configuration declares the new ones.
 fn map_launch_env() {
     const PAIRS: &[(&str, &str)] = &[
-        ("TELOS_EXTERNAL_SYNC_ENABLED", "ZED_EXTERNAL_SYNC_ENABLED"),
-        ("TELOS_WEBSOCKET_SYNC_ENABLED", "ZED_WEBSOCKET_SYNC_ENABLED"),
-        ("TELOS_WS_URL", "ZED_HELIX_URL"),
-        ("TELOS_WS_TOKEN", "ZED_HELIX_TOKEN"),
-        ("TELOS_WS_TLS", "ZED_HELIX_TLS"),
-        ("TELOS_WS_SKIP_TLS_VERIFY", "ZED_HELIX_SKIP_TLS_VERIFY"),
-        ("TELOS_STATELESS", "ZED_STATELESS"),
-        ("TELOS_SESSION_ID", "HELIX_SESSION_ID"),
-        ("TELOS_TOOL_APPROVAL", "ZED_TOOL_APPROVAL"),
+        ("EXTERNAL_SYNC_ENABLED", "ZED_EXTERNAL_SYNC_ENABLED"),
+        ("WEBSOCKET_SYNC_ENABLED", "ZED_WEBSOCKET_SYNC_ENABLED"),
+        ("WS_URL", "ZED_HELIX_URL"),
+        ("WS_TOKEN", "ZED_HELIX_TOKEN"),
+        ("WS_TLS", "ZED_HELIX_TLS"),
+        ("WS_SKIP_TLS_VERIFY", "ZED_HELIX_SKIP_TLS_VERIFY"),
+        ("STATELESS", "ZED_STATELESS"),
+        ("SESSION_ID", "HELIX_SESSION_ID"),
+        ("TOOL_APPROVAL", "ZED_TOOL_APPROVAL"),
     ];
-    for (contract_name, zed_name) in PAIRS {
-        if let Ok(value) = std::env::var(contract_name) {
+    for (suffix, zed_name) in PAIRS {
+        let contract_name = format!("ACPWS_{suffix}");
+        if let Ok(value) = std::env::var(&contract_name) {
+            std::env::set_var(zed_name, value);
+            continue;
+        }
+        let legacy_name = format!("TELOS_{suffix}");
+        if let Ok(value) = std::env::var(&legacy_name) {
+            eprintln!(
+                "launch: {legacy_name} is the name the contract carried before the rename; this \
+                 binary reads {contract_name}, and {legacy_name} goes away once the \
+                 configuration declares the new name"
+            );
             std::env::set_var(zed_name, value);
         }
     }
@@ -323,7 +340,18 @@ mod tests {
     // Env mutation is process-global; serialize the two tests.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    const TELOS_KEYS: [&str; 7] = [
+    const ACPWS_KEYS: [&str; 7] = [
+        "ACPWS_EXTERNAL_SYNC_ENABLED",
+        "ACPWS_WEBSOCKET_SYNC_ENABLED",
+        "ACPWS_WS_URL",
+        "ACPWS_WS_TOKEN",
+        "ACPWS_STATELESS",
+        "ACPWS_SESSION_ID",
+        "ACPWS_TOOL_APPROVAL",
+    ];
+    /// The names the contract carried before it was named for the protocol. A
+    /// binary still reads them, so the fallback is covered rather than assumed.
+    const LEGACY_KEYS: [&str; 7] = [
         "TELOS_EXTERNAL_SYNC_ENABLED",
         "TELOS_WEBSOCKET_SYNC_ENABLED",
         "TELOS_WS_URL",
@@ -342,9 +370,33 @@ mod tests {
         "ZED_TOOL_APPROVAL",
     ];
 
+    const VALUES: [&str; 7] = [
+        "true",
+        "true",
+        "127.0.0.1:8080",
+        "test-token",
+        "1",
+        "ses_t",
+        "always",
+    ];
+
     fn clear_env() {
-        for key in TELOS_KEYS.iter().chain(MAPPED_KEYS.iter()) {
+        for key in ACPWS_KEYS
+            .iter()
+            .chain(LEGACY_KEYS.iter())
+            .chain(MAPPED_KEYS.iter())
+        {
             std::env::remove_var(key);
+        }
+    }
+
+    fn assert_mapped() {
+        for (mapped, value) in MAPPED_KEYS.iter().zip(VALUES.iter()) {
+            assert_eq!(
+                std::env::var(mapped).ok().as_deref(),
+                Some(*value),
+                "mapped env {mapped}"
+            );
         }
     }
 
@@ -378,43 +430,63 @@ mod tests {
     }
 
     #[test]
-    fn maps_telos_launch_env_onto_vendored_names() {
+    fn maps_the_launch_contract_onto_vendored_names() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_env();
-        let values = [
-            "true",
-            "true",
-            "127.0.0.1:8080",
-            "test-token",
-            "1",
-            "ses_t",
-            "always",
-        ];
-        for (key, value) in TELOS_KEYS.iter().zip(values.iter()) {
+        for (key, value) in ACPWS_KEYS.iter().zip(VALUES.iter()) {
             std::env::set_var(key, value);
         }
 
         map_launch_env();
 
-        for (mapped, value) in MAPPED_KEYS.iter().zip(values.iter()) {
-            assert_eq!(
-                std::env::var(mapped).ok().as_deref(),
-                Some(*value),
-                "mapped env {mapped}"
-            );
+        assert_mapped();
+        clear_env();
+    }
+
+    /// A configuration that has not moved with the rename still launches, which is
+    /// what makes the rename take effect without a flag day on every deployment at
+    /// once.
+    #[test]
+    fn a_contract_name_falls_back_to_the_name_it_carried_before() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        for (key, value) in LEGACY_KEYS.iter().zip(VALUES.iter()) {
+            std::env::set_var(key, value);
         }
+
+        map_launch_env();
+
+        assert_mapped();
+        clear_env();
+    }
+
+    /// A configuration that declares both during the transition is read at the name
+    /// the contract carries now.
+    #[test]
+    fn the_name_the_contract_carries_now_wins() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("ACPWS_WS_URL", "127.0.0.1:9090");
+        std::env::set_var("TELOS_WS_URL", "127.0.0.1:8080");
+
+        map_launch_env();
+
+        assert_eq!(
+            std::env::var("ZED_HELIX_URL").ok().as_deref(),
+            Some("127.0.0.1:9090")
+        );
         clear_env();
     }
 
     #[test]
-    fn does_not_map_absent_telos_env() {
+    fn does_not_map_absent_launch_env() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_env();
         map_launch_env();
         for key in MAPPED_KEYS {
             assert!(
                 std::env::var_os(key).is_none(),
-                "{key} must stay unset without a TELOS_* source"
+                "{key} must stay unset without an ACPWS_* source"
             );
         }
         clear_env();
