@@ -3193,6 +3193,9 @@ impl AcpThread {
 
                 let should_continue = this
                     .update(cx, |this, cx| {
+                        // Read before the buffer is borrowed: the committed bytes belong to the
+                        // last entry, which is the one the buffer targets.
+                        let entry_idx = this.entries.len().saturating_sub(1);
                         let Some(buffer) = &mut this.streaming_text_buffer else {
                             return false;
                         };
@@ -3212,6 +3215,11 @@ impl AcpThread {
                             markdown.append(&buffer.pending[..byte_boundary]);
                             buffer.pending.drain(..byte_boundary);
                         });
+                        // The bytes just committed are part of the entry, so observers are told
+                        // it changed. Without this, the last reveal tick of an entry was on
+                        // screen and absent from the record: the writer reads the entry when an
+                        // update is emitted, and those bytes were committed only here.
+                        cx.emit(AcpThreadEvent::EntryUpdated(entry_idx));
 
                         true
                     })
@@ -5474,6 +5482,58 @@ mod tests {
         cx.executor().advance_clock(Duration::from_secs(1));
         cx.run_until_parked();
         streamed.read_with(cx, |markdown, _| assert_eq!(markdown.source(), &expected));
+    }
+    /// What the reveal commits is part of the entry, so it is announced. A writer that reads
+    /// the entry only when an update is emitted otherwise keeps the prefix it saw while the
+    /// text was still buffered, which is how a turn's last thought reached the record cut.
+    #[gpui::test]
+    async fn test_streaming_reveal_announces_the_text_it_commits(cx: &mut TestAppContext) {
+        init_test(cx);
+        let project = Project::test(FakeFs::new(cx.executor()), [], cx).await;
+        let connection = Rc::new(FakeAgentConnection::new());
+        let thread = cx
+            .update(|cx| {
+                connection.new_session(project, PathList::new(&[Path::new(path!("/test"))]), cx)
+            })
+            .await
+            .expect("session should be created");
+
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let _subscription = cx.update(|cx| {
+            let events = events.clone();
+            cx.subscribe(&thread, move |_, event, _| {
+                if let AcpThreadEvent::EntryUpdated(index) = event {
+                    events.borrow_mut().push(*index);
+                }
+            })
+        });
+
+        thread.update(cx, |thread, cx| {
+            // The first chunk makes the entry; the second is what the reveal holds, because a
+            // chunk appended to an existing text block goes through the streaming buffer.
+            thread.push_assistant_content_block("streamed ".into(), false, cx);
+            thread.push_assistant_content_block("text".into(), false, cx);
+            assert!(
+                thread.streaming_text_buffer.is_some(),
+                "the second chunk is buffered"
+            );
+        });
+        events.borrow_mut().clear();
+
+        cx.run_until_parked();
+        cx.executor().advance_clock(Duration::from_millis(100));
+        cx.run_until_parked();
+
+        assert!(
+            !events.borrow().is_empty(),
+            "the reveal announced the bytes it committed"
+        );
+        thread.read_with(cx, |thread, cx| {
+            assert!(
+                thread.to_markdown(cx).contains("streamed text"),
+                "and the entry holds the text that was announced"
+            );
+        });
     }
 
     #[gpui::test]
