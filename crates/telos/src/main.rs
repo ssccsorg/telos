@@ -208,6 +208,12 @@ fn main() {
 }
 
 fn run_headless(cx: &mut App) -> Result<()> {
+    // This binary is a headless host, so it has no controlling TTY. A PTY terminal then never
+    // starts its command and its output capture lands on this process's own stderr, which is
+    // how a tool call reads back the agent's log instead of the command's answer. The flag
+    // makes a task terminal a plain subprocess with piped output, which is what runs here.
+    cx.set_global(acp_thread::HeadlessTerminal(true));
+
     release_channel::init(semver::Version::new(0, 1, 0), cx);
     settings::init(cx);
     zlog_settings::init(cx);
