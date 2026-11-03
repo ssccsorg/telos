@@ -214,6 +214,18 @@ fn run_headless(cx: &mut App) -> Result<()> {
     // makes a task terminal a plain subprocess with piped output, which is what runs here.
     cx.set_global(acp_thread::HeadlessTerminal(true));
 
+    // One line, so a caller reads which terminal the model got: the two paths differ in where
+    // a command's output comes from, and a host that silently gets the wrong one is how a tool
+    // answer ends up reading back this process's own log.
+    log::info!(
+        "terminal: {}",
+        if acp_thread::HeadlessTerminal::is_enabled(cx) {
+            "subprocess with piped output"
+        } else {
+            "pty"
+        }
+    );
+
     release_channel::init(semver::Version::new(0, 1, 0), cx);
     settings::init(cx);
     zlog_settings::init(cx);
