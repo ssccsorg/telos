@@ -9,7 +9,6 @@ pub mod deepseek;
 pub mod open_ai;
 pub mod open_ai_compatible;
 
-
 const COMMON_RESERVED_HEADER_NAMES: &[&str] = &["Authorization", "Content-Type", "Accept"];
 
 /// Validate the user-supplied custom-headers map once at settings load time,

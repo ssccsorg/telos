@@ -115,6 +115,11 @@ Current divergences:
   the `LanguageModelClient` split. The retained providers return data and
   stream through the provider, and `crates/telos/src/stub_backend.rs` follows
   the same shape.
+- `crates/language_models` keeps only the dependencies the retained providers
+  use. `language_models_cloud`, `cloud_api_client`, `cloud_api_types`, `sha2`,
+  `base64`, `fs`, and `rand` are out, and the no-caller
+  `anthropic/telemetry.rs` module is removed. The registry no longer orders a
+  `zed.dev` provider first.
 - `crates/gpui` and the platform crates were not ported in the 2026-09 or
   2026-11 rounds. The 2026-11 window changed the app, context, test context,
   platform, and text layout files; none came across. The cut keeps its own

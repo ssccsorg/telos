@@ -889,7 +889,7 @@ pub struct AvailableAgent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AvailableModel {
     /// Identifier to pass as the `model` field when creating a thread.
-    /// For `spawn_agent`, use a model from the native Zed agent entry.
+    /// For `spawn_agent`, use a model from the native agent entry.
     pub id: String,
     /// Human-readable name.
     pub name: SharedString,

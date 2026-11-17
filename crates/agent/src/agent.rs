@@ -427,15 +427,13 @@ impl LanguageModels {
     }
 }
 
-/// Implemented by the UI layer to provide the ability for agent tools to create
-/// sibling threads that appear in the agent panel.
+/// Implemented by the host to let agent tools create sibling threads.
 ///
-/// `agent_ui::AgentPanel` installs an implementation of this trait on the
-/// `NativeAgent` when it sets up a connection. Tools in a native-agent thread
-/// then discover and use the host via `NativeThreadEnvironment`. The UI side
-/// is responsible for keeping the installed host current; a host whose
-/// backing UI has been torn down will fail its first request with a clear
-/// error rather than being detected up front.
+/// The host installs an implementation of this trait on the `NativeAgent` when
+/// it sets up a connection. Tools in a native-agent thread then discover and
+/// use the host via `NativeThreadEnvironment`. The host keeps the installed
+/// implementation current; a host that has been torn down fails its first
+/// request with a clear error rather than being detected up front.
 pub trait SiblingThreadHost {
     fn create_sibling_thread(
         &self,
@@ -3565,8 +3563,7 @@ impl ThreadEnvironment for NativeThreadEnvironment {
             Ok(Some(host)) => host,
             Ok(None) => {
                 return Task::ready(Err(anyhow!(
-                    "No sibling-thread host is registered. This usually means the \
-                     agent panel hasn't been initialized in this workspace."
+                    "No sibling-thread host is registered for this agent."
                 )));
             }
             Err(err) => return Task::ready(Err(err)),

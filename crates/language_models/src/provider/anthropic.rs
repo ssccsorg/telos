@@ -1,5 +1,3 @@
-pub mod telemetry;
-
 use anthropic::{ANTHROPIC_API_URL, AnthropicError, AnthropicModelMode};
 use anyhow::Result;
 use collections::BTreeMap;
@@ -30,7 +28,7 @@ const PROVIDER_NAME: LanguageModelProviderName = ANTHROPIC_PROVIDER_NAME;
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct AnthropicSettings {
     pub api_url: String,
-    /// Extend Zed's list of Anthropic models.
+    /// Extend the built-in Anthropic model list.
     pub available_models: Vec<AvailableModel>,
     /// User-configured headers added to every Anthropic request.
     pub custom_headers: CustomHeaders,

@@ -21,8 +21,8 @@ pub const DEFAULT_MODEL_CONCURRENCY: usize = 16;
 /// A provider's local concurrency caps, one [`RateLimiter`] per model id.
 ///
 /// Upstream rate limits are per credential and model family, and exceeding
-/// them surfaces as retryable errors. This only bounds how many requests Zed
-/// has in flight to one model at once.
+/// them surfaces as retryable errors. This only bounds how many requests this
+/// process has in flight to one model at once.
 pub struct ModelRateLimiters {
     limit: usize,
     limiters: Mutex<HashMap<LanguageModelId, RateLimiter>>,
