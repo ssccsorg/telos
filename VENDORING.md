@@ -137,6 +137,18 @@ Current divergences:
   pairs with it is not in the cut. Two markdown-rendering tests are gone with
   the markdown crate, and the pinned serialization expectations follow the
   ported formats. The suite runs 143 tests.
+- `crates/project` gains `HeadlessBufferLanguage`, a global a host without an
+  editor sets. `Project::open_buffer` then gives the new buffer the language its
+  path names and registers it with the language servers, which upstream leaves
+  to the editor. Unset, the method behaves as upstream. rust-analyzer still
+  reports nothing for a file no Cargo workspace reaches, which is the server's
+  behavior rather than this cut's.
+- `crates/telos` carries the language layer: `language_support` registers the
+  `rust` grammar and the Rust language, and `language_support/rust.rs` is
+  upstream's `RustLspAdapter` without its completion-label, symbol-label,
+  task-context, manifest-provider, and settings-schema surfaces. Only the
+  installer and the diagnostic hooks remain, which is what a headless agent
+  reads.
 
 ## Boundary and Invariants
 
@@ -206,6 +218,8 @@ about whether a crate belongs, ask whether the binary can reach it.
 | `agent-client-protocol` (external) | pinned `=2.2.0` | ACP wire drift; the v2 migration is deferred to the next round |
 | `language_model`, `language_model_core`, `language_models` | kept, adapted | provider registry, API key state, model requests |
 | `project`, `language`, `language_core`, `lsp` | kept | MCP, LSP behavior, worktree handling |
+| `languages` | not ported; the `rust` adapter lives in `crates/telos` | the crate bundles every language and installer; telos takes one adapter and the grammar it needs |
+| `grammars` | kept, configs and queries only | embedded language configs and tree-sitter queries; `load-grammars` stays off so the binary carries only the grammar `language_support` registers |
 | `context_server`, `fs`, `git`, `text`, `streaming_diff` | kept | MCP client, file and diff semantics |
 | `html_to_markdown` | kept | HTML to markdown conversion used by message content |
 | `markdown`, `mermaid_render` | excluded | render-only stack, stripped with the UI surface |
@@ -263,8 +277,10 @@ it wholesale. Re-check these after every port:
   message as `ContentBlock::Text`; mention URIs are parsed downstream by
   `acp_thread::mention::MentionUri`.
 - `telos` initializes the graph in order: release channel, settings,
-  feature flags, trusted worktrees, HTTP client, client, language registry,
-  node runtime, agent, agent servers, and the websocket sync.
+  feature flags, trusted worktrees, HTTP client, client, language registry
+  and its language layer, node runtime, agent, agent servers, and the
+  websocket sync. Two globals precede the project: `HeadlessTerminal` and
+  `HeadlessBufferLanguage`.
 - The release profile is `telos-release` (`debug = false`, `strip =
   "symbols"`). The binary lands at `target/telos-release/tel`; actus
   expects exactly that path via `TELOS_BIN`.
