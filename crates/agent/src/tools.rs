@@ -9,8 +9,6 @@ mod diagnostics_tool;
 mod edit_file_tool;
 mod edit_session;
 mod enable_context_server_tool;
-#[cfg(all(test, feature = "unit-eval"))]
-mod evals;
 mod fetch_tool;
 mod find_path_tool;
 mod find_references_tool;

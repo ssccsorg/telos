@@ -48,7 +48,6 @@ members = [
     "crates/language_model",
     "crates/language_model_core",
     "crates/language_models",
-    "crates/language_models_cloud",
     "crates/lsp",
     "crates/migrator",
     "crates/multi_buffer",
@@ -171,7 +170,6 @@ language_core = { path = "crates/language_core" }
 language_model = { path = "crates/language_model" }
 language_model_core = { path = "crates/language_model_core" }
 language_models = { path = "crates/language_models", default-features = false }
-language_models_cloud = { path = "crates/language_models_cloud" }
 languages = { path = "crates/languages" }
 json_schema_store = { path = "crates/json_schema_store" }
 language_extension = { path = "crates/language_extension" }
