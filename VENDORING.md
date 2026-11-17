@@ -29,21 +29,21 @@ The zed-derived crates under `crates/`, everything except the telos-owned
 `crates/telos` and the helix-ported `crates/external_websocket_sync`, were
 copied from upstream zed at this pinned base:
 
-    zed-industries/zed @ ca49b5dac8178e87eed4b6af55ebcac73c6d1677
-    main, 2026-09-21, "agent_ui: Make provider-owned terminals read-only
-    (#64550)"
+    zed-industries/zed @ f8b0d52b3ef22604e4f01179f74c12d3cdd29b8a
+    main, 2026-09-28, "debugger: Fix rerun last debug scenario (#64856)"
 
 Absorbed into telos on 2026-08-29 (telos `0a506ee`), then ported forward on
 2026-09-21 (telos `81eaeb5`) with the `agent-client-protocol` 2.2.0 schema
-upgrade. The absorption's spot checks were `crates/text/src/text.rs` and
-`crates/sum_tree/src/sum_tree.rs`. The port, its classification, and its
-gate results live in `docs/sync/2026-09.md`.
+upgrade, and on 2026-11-17 to the last commit before the ACP v2 migration.
+The absorption's spot checks were `crates/text/src/text.rs` and
+`crates/sum_tree/src/sum_tree.rs`. The ports, their classification, and gate
+results live in `docs/sync/2026-09.md` and `docs/sync/2026-11.md`.
 
 The pin is a diff baseline, not a promise of identity. Telos now diverges
 from upstream on purpose (see Crate Map and Divergences). Before any port,
 diff from the pin to see both upstream changes and telos drift:
 
-    git -C <zed clone> diff e3adf43..<candidate> -- crates/<path>
+    git -C <zed clone> diff <pin>..<candidate> -- crates/<path>
 
 Bump the pin at the end of every port to the reference commit that was
 actually used. A stale pin silently widens the next diff.
@@ -82,7 +82,7 @@ Current divergences:
 - The gpui cut carries a no-op `ActivityGuard` and `App::prevent_idle_sleep` so
   ported agent code compiles unchanged. A headless server has no desktop idle
   sleep. The test-support accounting upstream pairs with it is absent, so
-  `acp_thread`'s idle-sleep tests do not compile under `--all-targets`.
+  `acp_thread` keeps the idle-sleep suite out (see below).
 - `crates/language_models` keeps the retained provider set (anthropic, open_ai,
   deepseek and the compatible variants) and takes their upstream behavior while
   dropping the `ui`-backed settings views, which switch to `crates/icons`.
@@ -99,17 +99,38 @@ Current divergences:
   together. The port first took the code without the version, which compiles on
   macOS because those blocks are `cfg(target_os = "linux")` and fails on the
   gate image.
-- `crates/gpui` and the platform crates were not ported in the 2026-09 round.
-  Upstream changed 83 files in that window and none came across; the cut keeps
-  its own surface and the only additions are the no-op `ActivityGuard` and
-  `App::prevent_idle_sleep`. A later round ports the upstream changes
-  selectively, as the crate map calls for.
+- `crates/acp_thread` takes upstream's restructured `MessageContent`,
+  `ContentBlock`, and `RenderBlock` with retained source blocks, and keeps
+  telos's `MessageText` as the text entity. The streaming reveal uses
+  upstream's source cursor. Telos also keeps its `EntryUpdated` emission: the
+  reveal announces the bytes it commits, which
+  `test_streaming_reveal_announces_the_text_it_commits` pins.
+- The ACP SDK stays at `=2.2.0` for the 2026-11 round. Upstream's v2 migration
+  starts at `ee43be113e` (2026-09-28) and replaces the shared content, tool,
+  session, and permission types before reaching SDK 3.4. The migration is the
+  next round's workstream. The v2 schema is unstable upstream, and the actus
+  contract is telos's own WebSocket protocol, so no actus behavior depends on
+  it yet.
+- `crates/language_model*` carries upstream's plain-data `LanguageModel` and
+  the `LanguageModelClient` split. The retained providers return data and
+  stream through the provider, and `crates/telos/src/stub_backend.rs` follows
+  the same shape.
+- `crates/gpui` and the platform crates were not ported in the 2026-09 or
+  2026-11 rounds. The 2026-11 window changed the app, context, test context,
+  platform, and text layout files; none came across. The cut keeps its own
+  surface, and a later round ports the upstream changes selectively.
+- The 2026-11 round keeps the agent path only. Editor, language-editor, LSP
+  view, git commit view, remote transport, theme, terminal settings, and
+  benchmark changes from the same window were reverted after the first port
+  pass. The retained set is the agent loop, ACP thread and servers, language
+  model layer, fs watcher, terminal raw output, and the settings the agent
+  reads.
 - `crates/acp_thread`'s test module is adapted to this cut. The idle-sleep suite
   and its helpers are gone, because the feature has no observable behavior here:
   the gpui `ActivityGuard` is a no-op and the test-support accounting upstream
   pairs with it is not in the cut. Two markdown-rendering tests are gone with
   the markdown crate, and the pinned serialization expectations follow the
-  ported formats. The suite runs 134 tests.
+  ported formats. The suite runs 143 tests.
 
 ## Boundary and Invariants
 
@@ -176,7 +197,7 @@ about whether a crate belongs, ask whether the binary can reach it.
 | upstream zed crate | telos status | sync interest |
 |---|---|---|
 | `acp_thread`, `agent`, `agent_servers` | kept, adapted | the agent loop, tool execution, session lifecycle, auth flows |
-| `agent-client-protocol` (external) | pinned `=2.0.0` | ACP wire drift; the highest-risk dependency |
+| `agent-client-protocol` (external) | pinned `=2.2.0` | ACP wire drift; the v2 migration is deferred to the next round |
 | `language_model`, `language_model_core`, `language_models` | kept, adapted | provider registry, API key state, model requests |
 | `project`, `language`, `language_core`, `lsp` | kept | MCP, LSP behavior, worktree handling |
 | `context_server`, `fs`, `git`, `text`, `streaming_diff` | kept | MCP client, file and diff semantics |

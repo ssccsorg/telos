@@ -21,7 +21,6 @@ default = ["extension-support"]
 extension-support = ["dep:extension", "dep:extension_host"]
 
 [dependencies]
-async-lock.workspace = true
 anthropic = { workspace = true, features = ["schemars"] }
 anyhow.workspace = true
 
@@ -52,8 +51,6 @@ log.workspace = true
 
 
 open_ai = { workspace = true, features = ["schemars"] }
-
-
 rand.workspace = true
 release_channel.workspace = true
 schemars.workspace = true
@@ -62,7 +59,6 @@ serde_json.workspace = true
 settings.workspace = true
 sha2.workspace = true
 strum.workspace = true
-tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 icons.workspace = true
 util.workspace = true
 

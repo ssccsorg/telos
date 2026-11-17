@@ -6,35 +6,37 @@
 //! without model variance. The response text is configurable through
 //! `TELOS_STUB_RESPONSE` (defaults to "OK").
 
-use std::sync::Arc;
-
-use futures::{
-    channel::mpsc,
-    future::BoxFuture,
-    stream::{BoxStream, StreamExt as _},
-    FutureExt as _,
-};
+use futures::{channel::mpsc, future::BoxFuture, stream::StreamExt as _, FutureExt as _};
 use gpui::{App, AsyncApp, Entity, Task};
 use http_client::Result;
 use language_model::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice, StopReason,
+    AuthenticateError, LanguageModel, LanguageModelClient, LanguageModelCompletionError,
+    LanguageModelCompletionEvent, LanguageModelCompletionStream, LanguageModelId,
+    LanguageModelName, LanguageModelProvider, LanguageModelProviderId, LanguageModelProviderName,
+    LanguageModelProviderState, LanguageModelRequest, StopReason,
 };
 
 pub struct StubBackendProvider {
     id: LanguageModelProviderId,
     name: LanguageModelProviderName,
-    model: Arc<StubBackendModel>,
+    model: LanguageModel,
 }
 
 impl Default for StubBackendProvider {
     fn default() -> Self {
+        let id = LanguageModelProviderId::from("stub-backend".to_string());
+        let name = LanguageModelProviderName::from("Stub Backend".to_string());
         Self {
-            id: LanguageModelProviderId::from("stub-backend".to_string()),
-            name: LanguageModelProviderName::from("Stub Backend".to_string()),
-            model: Arc::new(StubBackendModel::default()),
+            model: LanguageModel::new(
+                LanguageModelId::from("stub-backend-model".to_string()),
+                LanguageModelName::from("Stub Backend Model".to_string()),
+                id.clone(),
+                name.clone(),
+                "stub-backend",
+                8192,
+            ),
+            id,
+            name,
         }
     }
 }
@@ -56,15 +58,15 @@ impl LanguageModelProvider for StubBackendProvider {
         self.name.clone()
     }
 
-    fn default_model(&self, _cx: &App) -> Option<Arc<dyn LanguageModel>> {
+    fn default_model(&self, _cx: &App) -> Option<LanguageModel> {
         Some(self.model.clone())
     }
 
-    fn default_fast_model(&self, _cx: &App) -> Option<Arc<dyn LanguageModel>> {
+    fn default_fast_model(&self, _cx: &App) -> Option<LanguageModel> {
         Some(self.model.clone())
     }
 
-    fn provided_models(&self, _cx: &App) -> Vec<Arc<dyn LanguageModel>> {
+    fn provided_models(&self, _cx: &App) -> Vec<LanguageModel> {
         vec![self.model.clone()]
     }
 
@@ -81,68 +83,14 @@ impl LanguageModelProvider for StubBackendProvider {
     }
 }
 
-pub struct StubBackendModel {
-    id: LanguageModelId,
-    name: LanguageModelName,
-}
-
-impl Default for StubBackendModel {
-    fn default() -> Self {
-        Self {
-            id: LanguageModelId::from("stub-backend-model".to_string()),
-            name: LanguageModelName::from("Stub Backend Model".to_string()),
-        }
-    }
-}
-
-impl LanguageModel for StubBackendModel {
-    fn id(&self) -> LanguageModelId {
-        self.id.clone()
-    }
-
-    fn name(&self) -> LanguageModelName {
-        self.name.clone()
-    }
-
-    fn provider_id(&self) -> LanguageModelProviderId {
-        LanguageModelProviderId::from("stub-backend".to_string())
-    }
-
-    fn provider_name(&self) -> LanguageModelProviderName {
-        LanguageModelProviderName::from("Stub Backend".to_string())
-    }
-
-    fn telemetry_id(&self) -> String {
-        "stub-backend".to_string()
-    }
-
-    fn supports_images(&self) -> bool {
-        false
-    }
-
-    fn supports_tools(&self) -> bool {
-        false
-    }
-
-    fn supports_tool_choice(&self, _choice: LanguageModelToolChoice) -> bool {
-        false
-    }
-
-    fn max_token_count(&self) -> u64 {
-        8192
-    }
-
+impl LanguageModelClient for StubBackendProvider {
     fn stream_completion(
         &self,
+        _model: &LanguageModel,
         _request: LanguageModelRequest,
         _cx: &AsyncApp,
-    ) -> BoxFuture<
-        'static,
-        Result<
-            BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
-            LanguageModelCompletionError,
-        >,
-    > {
+    ) -> BoxFuture<'static, Result<LanguageModelCompletionStream, LanguageModelCompletionError>>
+    {
         let response = std::env::var("TELOS_STUB_RESPONSE").unwrap_or_else(|_| "OK".to_string());
         async move {
             let (tx, rx) = mpsc::unbounded();
