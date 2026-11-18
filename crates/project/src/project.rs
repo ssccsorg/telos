@@ -1173,6 +1173,49 @@ impl DisableAiSettings {
     }
 }
 
+/// Set by a host that opens buffers without an editor, which is what fills the gap an
+/// editor leaves: the buffer's language and its language servers.
+pub struct HeadlessBufferLanguage(pub bool);
+
+impl gpui::Global for HeadlessBufferLanguage {}
+
+impl HeadlessBufferLanguage {
+    pub fn is_enabled(cx: &App) -> bool {
+        cx.try_global::<Self>().is_some_and(|headless| headless.0)
+    }
+}
+
+/// Gives a freshly opened buffer the language its path names, which an editor would
+/// otherwise do before any tool could read an outline or a diagnostic from it.
+async fn attach_language(
+    languages: Arc<LanguageRegistry>,
+    buffer: &Entity<Buffer>,
+    cx: &mut AsyncApp,
+) {
+    let Some(path) = buffer.read_with(cx, |buffer, cx| {
+        if buffer.language().is_some() {
+            return None;
+        }
+        let file = File::from_dyn(buffer.file())?;
+        if !file.is_local {
+            return None;
+        }
+        Some(file.worktree.read(cx).absolutize(&file.path))
+    }) else {
+        return;
+    };
+
+    let Ok(language) = languages.load_language_for_file_path(&path).await else {
+        return;
+    };
+
+    buffer.update(cx, |buffer, cx| {
+        if buffer.language().is_none() {
+            buffer.set_language(Some(language), cx);
+        }
+    });
+}
+
 impl Project {
     pub fn init(client: &Arc<Client>, cx: &mut App) {
         connection_manager::init(client.clone(), cx);
@@ -3277,8 +3320,37 @@ impl Project {
             return Task::ready(Err(anyhow!(ErrorCode::Disconnected)));
         }
 
-        self.buffer_store.update(cx, |buffer_store, cx| {
-            buffer_store.open_buffer(path.into(), cx)
+        let path = path.into();
+        if !HeadlessBufferLanguage::is_enabled(cx) {
+            return self
+                .buffer_store
+                .update(cx, |buffer_store, cx| buffer_store.open_buffer(path, cx));
+        }
+
+        let buffer = self
+            .buffer_store
+            .update(cx, |buffer_store, cx| buffer_store.open_buffer(path, cx));
+        let languages = self.languages.clone();
+        let lsp_store = self.lsp_store.downgrade();
+
+        // A headless host has no editor to set a buffer's language or start its servers,
+        // and a tool that reads one before that sees no outline and no diagnostics.
+        cx.spawn(async move |cx| {
+            let buffer = buffer.await?;
+            attach_language(languages, &buffer, cx).await;
+            // Nothing holds the returned handle, so the registration must not be
+            // refcounted to it.
+            lsp_store
+                .update(cx, |lsp_store, cx| {
+                    lsp_store.register_buffer_with_language_servers(
+                        &buffer,
+                        HashSet::default(),
+                        true,
+                        cx,
+                    )
+                })
+                .log_err();
+            Ok(buffer)
         })
     }
 

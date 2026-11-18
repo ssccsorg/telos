@@ -6,6 +6,7 @@
 //! include those crates, so a binary rooted here excludes them from the
 //! build entirely.
 
+mod language_support;
 mod stub_backend;
 
 use std::collections::{HashMap, HashSet};
@@ -213,6 +214,7 @@ fn run_headless(cx: &mut App) -> Result<()> {
     // how a tool call reads back the agent's log instead of the command's answer. The flag
     // makes a task terminal a plain subprocess with piped output, which is what runs here.
     cx.set_global(acp_thread::HeadlessTerminal(true));
+    cx.set_global(project::HeadlessBufferLanguage(true));
 
     // One line, so a caller reads which terminal the model got: the two paths differ in where
     // a command's output comes from, and a host that silently gets the wrong one is how a tool
@@ -252,6 +254,7 @@ fn run_headless(cx: &mut App) -> Result<()> {
 
     // Language registry.
     let languages = Arc::new(LanguageRegistry::new(cx.background_executor().clone()));
+    language_support::init(&languages);
     let node_runtime = NodeRuntime::new(client.http_client(), None, {
         let (mut tx, rx): (
             watch::Sender<Option<NodeBinaryOptions>>,

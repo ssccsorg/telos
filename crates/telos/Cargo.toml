@@ -25,7 +25,7 @@ settings.workspace = true
 release_channel.workspace = true
 feature_flags.workspace = true
 futures.workspace = true
-http_client.workspace = true
+http_client = { workspace = true, features = ["github-download"] }
 zlog.workspace = true
 zed_env_vars.workspace = true
 client.workspace = true
@@ -39,12 +39,18 @@ serde_json.workspace = true
 collections.workspace = true
 parking_lot.workspace = true
 language.workspace = true
+lsp.workspace = true
 node_runtime.workspace = true
 reqwest_client.workspace = true
 zlog_settings.workspace = true
 semver = "1"
 tokio.workspace = true
 watch.workspace = true
+async-trait.workspace = true
+grammars.workspace = true
+regex.workspace = true
+smol.workspace = true
+tree-sitter-rust.workspace = true
 
 [dev-dependencies]
 fs = { workspace = true, features = ["test-support"] }

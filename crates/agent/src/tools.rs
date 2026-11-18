@@ -9,8 +9,6 @@ mod diagnostics_tool;
 mod edit_file_tool;
 mod edit_session;
 mod enable_context_server_tool;
-#[cfg(all(test, feature = "unit-eval"))]
-mod evals;
 mod fetch_tool;
 mod find_path_tool;
 mod find_references_tool;
@@ -240,9 +238,7 @@ pub fn tool_feature_flag_enabled(tool_name: &str, cx: &App) -> bool {
         | GetCodeActionsTool::NAME
         | ApplyCodeActionTool::NAME
         | GoToDefinitionTool::NAME => cx.has_flag::<LspToolFeatureFlag>(),
-        CreateThreadTool::NAME | ListAgentsAndModelsTool::NAME => {
-            cx.has_flag::<CreateThreadToolFeatureFlag>()
-        }
+        CreateThreadTool::NAME => cx.has_flag::<CreateThreadToolFeatureFlag>(),
         _ => true,
     }
 }

@@ -515,6 +515,37 @@ async fn test_external_editorconfig_root_stops_traversal(cx: &mut gpui::TestAppC
 }
 
 #[gpui::test]
+async fn test_headless_open_buffer_attaches_language(cx: &mut TestAppContext) {
+    init_test(cx);
+    cx.update(|cx| cx.set_global(project::HeadlessBufferLanguage(true)));
+
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(path!("/worktree"), json!({ "main.rs": "fn main() {}" }))
+        .await;
+
+    let project = Project::test(fs, [path!("/worktree").as_ref()], cx).await;
+    let language_registry = project.read_with(cx, |project, _| project.languages().clone());
+    language_registry.add(rust_lang());
+
+    let worktree = project.update(cx, |project, cx| project.worktrees(cx).next().unwrap());
+    cx.executor().run_until_parked();
+
+    let buffer = project
+        .update(cx, |project, cx| {
+            project.open_buffer((worktree.read(cx).id(), rel_path("main.rs")), cx)
+        })
+        .await
+        .unwrap();
+
+    cx.update(|cx| {
+        assert_eq!(
+            buffer.read(cx).language().map(|language| language.name()),
+            Some(LanguageName::new("Rust"))
+        );
+    });
+}
+
+#[gpui::test]
 async fn test_external_editorconfig_root_in_parent_stops_traversal(cx: &mut gpui::TestAppContext) {
     init_test(cx);
 
